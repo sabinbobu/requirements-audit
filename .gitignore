@@ -1,0 +1,119 @@
+# ─── Local-only planning & strategy docs (NEVER commit) ─────────────────
+# These files contain personal build notes and career-strategy content.
+# Keep them in the working tree as local references; do not publish.
+Project_plan.md
+requirements-audit.agent.md
+.github/requirements-audit.agent.md
+
+# ─── Secrets & environment ────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ─── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+share/python-wheels/
+MANIFEST
+
+# ─── uv / virtual envs ────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.python-version
+# uv.lock SHOULD be committed (reproducible installs)
+
+# ─── Testing & coverage ───────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ─── Type checking & linting ──────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.dmypy.json
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_meta
+
+# ─── IDEs / editors ───────────────────────────────────────────────────────
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── OS noise ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Docker / service data (mounted volumes) ──────────────────────────────
+.docker-data/
+qdrant_storage/
+langfuse_postgres/
+*.sqlite
+*.sqlite3
+*.db
+
+# ─── Logs & traces ────────────────────────────────────────────────────────
+*.log
+logs/
+traces/
+langfuse-export/
+
+# ─── Eval artifacts (results, not the golden sets) ────────────────────────
+evals/results/
+evals/runs/
+evals/.cache/
+
+# ─── Corpus generation outputs (intermediate; final corpus IS committed) ──
+corpus/_generated/
+corpus/.cache/
+corpus/embeddings_cache/
+
+# ─── Local model / embedding caches ───────────────────────────────────────
+.cache/
+.huggingface/
+models/
+*.bin
+*.safetensors
+*.gguf
+
+# ─── Node (only if n8n local UI ever lands) ───────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── Misc build & temp ────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
