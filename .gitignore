@@ -4,6 +4,7 @@
 Project_plan.md
 requirements-audit.agent.md
 .github/requirements-audit.agent.md
+Lessons_Learned.md
 
 # ─── Secrets & environment ────────────────────────────────────────────────
 .env
@@ -33,7 +34,7 @@ MANIFEST
 venv/
 env/
 ENV/
-.python-version
+# .python-version IS committed — pins the interpreter for uv + CI reproducibility
 # uv.lock SHOULD be committed (reproducible installs)
 
 # ─── Testing & coverage ───────────────────────────────────────────────────

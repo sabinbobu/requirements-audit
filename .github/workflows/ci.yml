@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1" # fail if uv.lock is out of date rather than silently resolving
+
+jobs:
+  # lint → typecheck → unit → eval gate, in dependency order.
+  # Kept as one job so the uv environment is installed once.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies (runtime + dev)
+        run: uv sync --group dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+
+      - name: Type-check (mypy --strict)
+        run: uv run mypy
+
+      - name: Unit tests
+        run: uv run pytest -m "not eval"
+
+      # The eval gate grows into the senior signal (golden set, contradiction
+      # recall, Ragas, calibrated judge). Today it is a green placeholder; it
+      # must stay wired so regressions fail the build once the harness lands.
+      - name: Eval gate
+        run: uv run pytest -m eval
+
+  build:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build the package
+        run: uv build
