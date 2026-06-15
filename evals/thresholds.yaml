@@ -1,0 +1,30 @@
+# Eval-gate thresholds. Two tiers:
+#   gate  — deterministic, enforced on EVERY commit in CI (no API keys).
+#   live  — Ragas / judge / full-pipeline, enforced only in the nightly/live job.
+# Tuning a number here is a reviewable config change, not an edit to test logic.
+
+gate:
+  retrieval:
+    k: 5
+    # Observed on the seeded corpus: P@5 ~0.31 (ceiling is low — most questions
+    # have 1-2 expected sources), R@5 ~0.93. Floors keep headroom for benign
+    # changes while catching a real retrieval regression.
+    precision_at_k: 0.25
+    recall_at_k: 0.85
+  # Deterministic detectors recover the numeric + superseded true conflicts with
+  # no LLM (10 guaranteed; C06 is a bonus). Below this => a rule regression.
+  deterministic_recall_min: 10
+
+live:
+  generation:
+    faithfulness_min: 0.85
+    answer_relevancy_min: 0.80
+    context_precision_min: 0.70
+  contradiction:
+    # Full pipeline incl. the LLM comparator; plan fails the build below 11/15.
+    full_recall_min: 11
+    # Precision after the Critic filters false positives.
+    critic_precision_min: 0.80
+  judge:
+    precision_min: 0.70
+    recall_min: 0.70
