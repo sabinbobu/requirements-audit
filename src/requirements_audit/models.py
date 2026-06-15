@@ -138,3 +138,86 @@ class GroundTruth(BaseModel):
 
     contradictions: list[Contradiction]
     questions: list[GoldenQuestion]
+
+
+# ─── Agent-core models (Phase C) ──────────────────────────────────────────────
+class QueryRoute(StrEnum):
+    """Where the Planner sends a request."""
+
+    QA = "qa"
+    AUDIT = "audit"
+
+
+class HumanStatus(StrEnum):
+    """The human-review gate on a surfaced contradiction."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DISMISSED = "dismissed"
+
+
+class Plan(BaseModel):
+    """The Planner's typed routing decision."""
+
+    route: QueryRoute
+    subqueries: list[str] = Field(default_factory=list)
+    rationale: str = ""
+
+
+class Citation(BaseModel):
+    """A source-grounded quote backing a claim in an answer."""
+
+    doc_id: str
+    requirement_id: str
+    quote: str
+
+
+class Answer(BaseModel):
+    """The Analyst's Q&A output: prose plus the citations that ground it.
+
+    An empty `citations` list is the honest no-result / missing-data answer.
+    """
+
+    question: str
+    text: str
+    citations: list[Citation] = Field(default_factory=list)
+
+
+class CandidateContradiction(BaseModel):
+    """A possible contradiction proposed by the candidate-generation layer.
+
+    Field shape mirrors `Contradiction` so the eval can compare a run's output to
+    ground truth mechanically. `source` records which generator proposed it
+    (deterministic rule vs LLM comparator) for the before/after-Critic metric.
+    """
+
+    req_a: str
+    req_b: str
+    conflict_type: ConflictType
+    evidence_quote_a: str
+    evidence_quote_b: str
+    source: str  # e.g. "numeric_rule", "superseded_rule", "llm_comparator"
+
+
+class CriticVerdict(BaseModel):
+    """The Critic's judgment on one candidate, verified against quoted sources."""
+
+    is_conflict: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str
+
+
+class Finding(BaseModel):
+    """A candidate the Critic confirmed, carrying its verdict and review status."""
+
+    candidate: CandidateContradiction
+    verdict: CriticVerdict
+    human_status: HumanStatus = HumanStatus.PENDING
+
+
+class AuditReport(BaseModel):
+    """The result of an audit sweep: confirmed findings plus run counters."""
+
+    findings: list[Finding] = Field(default_factory=list)
+    candidates_considered: int = 0
+    rejected_by_critic: int = 0

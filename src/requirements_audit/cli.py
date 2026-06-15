@@ -69,24 +69,88 @@ def ingest(
 @app.command()
 def query(
     question: str = typer.Argument(..., help="A natural-language requirement query."),
+    db: Path = typer.Option(Path("data/requirements.sqlite"), "--db", help="SQLite store path."),
 ) -> None:
     """Answer a requirement query with inline citations."""
-    raise typer.Exit(_not_implemented("query"))
+    from requirements_audit.config import Settings
+    from requirements_audit.ingestion.store import SqliteStore
+    from requirements_audit.llm.provider import MissingCredentialsError, build_model
+    from requirements_audit.orchestrator import answer_query
+
+    settings = Settings()
+    try:
+        model = build_model(settings)
+    except MissingCredentialsError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+
+    with SqliteStore(db) as store:
+        answer, _trace = answer_query(store, question, settings, model=model)
+
+    typer.echo(answer.text)
+    if answer.citations:
+        typer.echo("\nSources:")
+        for c in answer.citations:
+            typer.echo(f"  [{c.doc_id} · {c.requirement_id}] {c.quote}")
+    else:
+        typer.secho("\n(no supporting sources in the corpus)", fg=typer.colors.YELLOW)
 
 
 @app.command()
-def audit() -> None:
+def audit(
+    db: Path = typer.Option(Path("data/requirements.sqlite"), "--db", help="SQLite store path."),
+    llm: bool | None = typer.Option(
+        None,
+        "--llm/--no-llm",
+        help="Force the LLM comparator+Critic on/off. Default: on when API keys are set.",
+    ),
+) -> None:
     """Sweep the indexed corpus for cross-document contradictions."""
-    raise typer.Exit(_not_implemented("audit"))
+    from requirements_audit.config import Settings
+    from requirements_audit.ingestion.store import SqliteStore
+    from requirements_audit.llm.provider import MissingCredentialsError, build_model
+    from requirements_audit.orchestrator import run_audit
 
+    settings = Settings()
+    use_llm = llm if llm is not None else None
+    model = None
+    if use_llm is not False:
+        try:
+            model = build_model(settings)
+        except MissingCredentialsError:
+            if use_llm:  # explicitly requested but unavailable
+                typer.secho(
+                    "LLM requested but no API key configured; run with --no-llm for the "
+                    "deterministic classes only.",
+                    fg=typer.colors.RED,
+                    err=True,
+                )
+                raise typer.Exit(1) from None
+            typer.secho(
+                "No API key: auditing the deterministic classes only "
+                "(numeric mismatch, superseded reference).",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
 
-def _not_implemented(command: str) -> int:
-    typer.secho(
-        f"`{command}` is not implemented yet (Phase 1 scaffolding).",
-        fg=typer.colors.YELLOW,
-        err=True,
+    with SqliteStore(db) as store:
+        report, _trace = run_audit(store, settings, model=model, use_llm=use_llm)
+
+    if not report.findings:
+        typer.echo("No contradictions found.")
+    for finding in report.findings:
+        c = finding.candidate
+        v = finding.verdict
+        typer.echo(
+            f"[{c.conflict_type.value}] {c.req_a} ↔ {c.req_b} "
+            f"(confidence {v.confidence:.2f}, {finding.human_status.value})"
+        )
+        typer.echo(f"    A: {c.evidence_quote_a}")
+        typer.echo(f"    B: {c.evidence_quote_b}")
+    typer.echo(
+        f"\n{len(report.findings)} finding(s) from {report.candidates_considered} candidate(s); "
+        f"{report.rejected_by_critic} rejected by the Critic."
     )
-    return 1
 
 
 if __name__ == "__main__":
