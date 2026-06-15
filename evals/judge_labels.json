@@ -1,0 +1,242 @@
+[
+  {
+    "req_a": "SYS-REQ-0101",
+    "req_b": "SWC-REQ-0101",
+    "text_a": "The watchdog supervision timeout shall be 100 ms for all operating modes.",
+    "text_b": "The software watchdog component shall be configured so that the watchdog supervision timeout is 250 ms.",
+    "label": true,
+    "note": "true: numeric_mismatch"
+  },
+  {
+    "req_a": "COM-REQ-0101",
+    "req_b": "SUP-REQ-0101",
+    "text_a": "The primary CAN bus shall operate at 500 kbit/s.",
+    "text_b": "The supplied communication controller supports a maximum CAN bit rate of 250 kbit/s.",
+    "label": true,
+    "note": "true: numeric_mismatch"
+  },
+  {
+    "req_a": "SYS-REQ-0102",
+    "req_b": "PWR-REQ-0101",
+    "text_a": "The ECU shall reach the operational state within 800 ms of power-on.",
+    "text_b": "Cold-start initialization of the ECU completes within 1200 ms.",
+    "label": true,
+    "note": "true: numeric_mismatch"
+  },
+  {
+    "req_a": "PWR-REQ-0102",
+    "req_b": "SUP-REQ-0102",
+    "text_a": "The ECU shall remain operational down to a supply voltage of 9.0 V.",
+    "text_b": "The component is rated for a minimum supply voltage of 10.5 V.",
+    "label": true,
+    "note": "true: numeric_mismatch"
+  },
+  {
+    "req_a": "DIAG-REQ-0101",
+    "req_b": "SWC-REQ-0102",
+    "text_a": "The diagnostic event memory shall store up to 512 confirmed DTC entries.",
+    "text_b": "The DTC memory buffer is dimensioned for 256 entries.",
+    "label": true,
+    "note": "true: numeric_mismatch"
+  },
+  {
+    "req_a": "SAFE-REQ-0101",
+    "req_b": "SUP-REQ-0103",
+    "text_a": "The system shall remain fully operational at ambient temperatures down to -40 degC.",
+    "text_b": "The supplied sensor module is not rated for operation below -20 degC.",
+    "label": true,
+    "note": "true: incompatible_constraint"
+  },
+  {
+    "req_a": "SYS-REQ-0103",
+    "req_b": "SWC-REQ-0103",
+    "text_a": "A diagnostic request shall receive a response within 50 ms.",
+    "text_b": "The diagnostic routine requires at least 80 ms of processing time before a response can be produced.",
+    "label": true,
+    "note": "true: incompatible_constraint"
+  },
+  {
+    "req_a": "SAFE-REQ-0102",
+    "req_b": "SYS-REQ-0104",
+    "text_a": "ASIL-D functions shall be implemented on dual redundant processing channels.",
+    "text_b": "The system is built on a single-controller architecture with no redundant processing channel.",
+    "label": true,
+    "note": "true: incompatible_constraint"
+  },
+  {
+    "req_a": "PWR-REQ-0103",
+    "req_b": "COM-REQ-0102",
+    "text_a": "Quiescent current in sleep mode shall not exceed 100 uA.",
+    "text_b": "The CAN transceiver remains fully powered during sleep to enable bus wake-up, drawing approximately 5 mA.",
+    "label": true,
+    "note": "true: incompatible_constraint"
+  },
+  {
+    "req_a": "SAFE-REQ-0103",
+    "req_b": "DIAG-REQ-0102",
+    "text_a": "Every diagnostic session shall require successful security authentication before any service is executed.",
+    "text_b": "The default diagnostic session permits reading stored DTCs without authentication.",
+    "label": true,
+    "note": "true: incompatible_constraint"
+  },
+  {
+    "req_a": "SWC-REQ-0104",
+    "req_b": "SYS-REQ-0105",
+    "text_a": "The startup task shall sequence boot indication as specified in SYS-REQ-0105.",
+    "text_b": "Boot indication shall complete within 2000 ms. This requirement is superseded by SYS-REQ-0140.",
+    "label": true,
+    "note": "true: superseded_reference"
+  },
+  {
+    "req_a": "DIAG-REQ-0103",
+    "req_b": "COM-REQ-0103",
+    "text_a": "DTC transmission timing shall follow the transport timing of COM-REQ-0103.",
+    "text_b": "CAN transport layer timeout shall be 1000 ms. This requirement is superseded by COM-REQ-0145.",
+    "label": true,
+    "note": "true: superseded_reference"
+  },
+  {
+    "req_a": "SUP-REQ-0104",
+    "req_b": "SAFE-REQ-0104",
+    "text_a": "The supplied component conforms to the safety case defined in SAFE-REQ-0104.",
+    "text_b": "The safety case assumes a watchdog-only supervision concept. This requirement is superseded by SAFE-REQ-0150.",
+    "label": true,
+    "note": "true: superseded_reference"
+  },
+  {
+    "req_a": "HMI-REQ-0101",
+    "req_b": "PWR-REQ-0104",
+    "text_a": "The startup splash screen timing shall align with PWR-REQ-0104.",
+    "text_b": "Startup inrush shall settle within 300 ms. This requirement is superseded by PWR-REQ-0160.",
+    "label": true,
+    "note": "true: superseded_reference"
+  },
+  {
+    "req_a": "SWC-REQ-0105",
+    "req_b": "DIAG-REQ-0104",
+    "text_a": "Freeze-frame capture shall reuse the signal set defined in DIAG-REQ-0104.",
+    "text_b": "Freeze-frame shall capture 4 signal values. This requirement is superseded by DIAG-REQ-0110.",
+    "label": true,
+    "note": "true: superseded_reference"
+  },
+  {
+    "req_a": "SYS-REQ-0106",
+    "req_b": "SWC-REQ-0106",
+    "text_a": "In normal operating mode the watchdog timeout shall be 100 ms.",
+    "text_b": "In extended diagnostic mode the watchdog timeout shall be 250 ms.",
+    "label": false,
+    "note": "near-miss: numeric_mismatch"
+  },
+  {
+    "req_a": "PWR-REQ-0105",
+    "req_b": "SUP-REQ-0105",
+    "text_a": "The nominal supply voltage is 12 V.",
+    "text_b": "The component operates across a supply range of 9 V to 16 V.",
+    "label": false,
+    "note": "near-miss: numeric_mismatch"
+  },
+  {
+    "req_a": "HMI-REQ-0102",
+    "req_b": "SYS-REQ-0140",
+    "text_a": "The boot animation shall complete in line with SYS-REQ-0140.",
+    "text_b": "Boot completion shall be indicated to the driver within 1500 ms of ignition-on. This requirement replaces the withdrawn startup-indication requirement.",
+    "label": false,
+    "note": "near-miss: superseded_reference"
+  },
+  {
+    "req_a": "SYS-REQ-0107",
+    "req_b": "SAFE-REQ-0105",
+    "text_a": "The ECU shall operate from -40 degC to +85 degC.",
+    "text_b": "The qualified operating temperature range is -40 degC to +85 degC.",
+    "label": false,
+    "note": "near-miss: incompatible_constraint"
+  },
+  {
+    "req_a": "SYS-REQ-0108",
+    "req_b": "SWC-REQ-0107",
+    "text_a": "A diagnostic response shall be returned within 100 ms.",
+    "text_b": "The diagnostic routine completes in a typical 40 ms.",
+    "label": false,
+    "note": "near-miss: incompatible_constraint"
+  },
+  {
+    "req_a": "COM-REQ-0110",
+    "req_b": "SUP-REQ-0110",
+    "text_a": "The diagnostic Ethernet link shall operate at 100 Mbit/s using 100BASE-T1.",
+    "text_b": "The supplier shall deliver the component with a minimum flash endurance of 100000 write cycles.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "HMI-REQ-0110",
+    "req_b": "DIAG-REQ-0120",
+    "text_a": "Warning telltales shall be rendered at a minimum luminance of 200 cd/m2.",
+    "text_b": "An inactive diagnostic session shall time out after 5 seconds.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "SAFE-REQ-0110",
+    "req_b": "SWC-REQ-0120",
+    "text_a": "The fault reaction time for ASIL-B functions shall not exceed 200 ms.",
+    "text_b": "Non-volatile data shall be stored in blocks of 256 bytes.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "PWR-REQ-0110",
+    "req_b": "SYS-REQ-0150",
+    "text_a": "The ECU shall enter sleep mode after 4 seconds of bus inactivity.",
+    "text_b": "The ECU shall support over-the-air software updates of up to 64 MB.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "COM-REQ-0150",
+    "req_b": "DIAG-REQ-0110",
+    "text_a": "After a bus-off event the node shall attempt recovery after 100 ms.",
+    "text_b": "Freeze-frame data shall capture the 8 most recent signal values at the time a DTC is set.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "SWC-REQ-0110",
+    "req_b": "HMI-REQ-0110",
+    "text_a": "Application software shall be partitioned into 10 ms and 50 ms cyclic tasks.",
+    "text_b": "Warning telltales shall be rendered at a minimum luminance of 200 cd/m2.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "SYS-REQ-0150",
+    "req_b": "SAFE-REQ-0150",
+    "text_a": "The ECU shall support over-the-air software updates of up to 64 MB.",
+    "text_b": "The safety concept shall use combined watchdog and program-flow monitoring.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "PWR-REQ-0160",
+    "req_b": "COM-REQ-0145",
+    "text_a": "Startup inrush current shall settle within 250 ms.",
+    "text_b": "The CAN transport layer timeout shall be 1500 ms.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "DIAG-REQ-0110",
+    "req_b": "PWR-REQ-0110",
+    "text_a": "Freeze-frame data shall capture the 8 most recent signal values at the time a DTC is set.",
+    "text_b": "The ECU shall enter sleep mode after 4 seconds of bus inactivity.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  },
+  {
+    "req_a": "SUP-REQ-0110",
+    "req_b": "SWC-REQ-0120",
+    "text_a": "The supplier shall deliver the component with a minimum flash endurance of 100000 write cycles.",
+    "text_b": "Non-volatile data shall be stored in blocks of 256 bytes.",
+    "label": false,
+    "note": "clear non-conflict (unrelated topics)"
+  }
+]

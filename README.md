@@ -66,7 +66,12 @@ This project enacts [Hamel Husain's L1/L2/L3 evals doctrine](https://hamel.dev/b
 - **L2 — human + model evals:** golden-question set with expected sources; Ragas faithfulness, answer relevancy, context precision; LLM-judge with **precision/recall calibrated against hand-labeled items** rather than raw agreement. Runs nightly and in CI.
 - **L3 — A/B tests:** out of MVP scope; documented in the roadmap.
 
-The CI eval gate fails the build when faithfulness or contradiction recall drops below configured thresholds.
+The eval gate runs in two tiers (thresholds live in `evals/thresholds.yaml`):
+
+- **Every commit, no API keys** (`pytest -m eval` in CI): retrieval `precision@k`/`recall@k` on the golden set, deterministic contradiction recall (numeric + superseded), and the L1 assertions. A retrieval or rule regression fails the build immediately.
+- **Nightly / on demand, with keys** (`.github/workflows/eval-nightly.yml`): Ragas faithfulness/answer_relevancy/context_precision, the calibrated LLM-judge, and the full contradiction recall + before-vs-after-Critic precision. This is where a faithfulness or recall drop fails the build.
+
+The LLM-judge is calibrated against `evals/judge_labels.json` (30 items) and reported as precision/recall, not raw agreement. Those labels are **construction-derived from the synthetic corpus** (seeded conflicts → yes, near-misses and clearly-unrelated pairs → no), not blind third-party human labels — the same synthetic-corpus tradeoff disclosed above, chosen so the calibration number is reproducible and versioned.
 
 ## Numbers (to be filled by benchmarking phase)
 
