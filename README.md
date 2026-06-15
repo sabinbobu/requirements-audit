@@ -36,7 +36,7 @@ docs (ARXML, MD, PDF) ──► INGESTION (parse → structure-aware chunk → e
                                     get_section,   pair reqs  sources;            + human gate
                                     find_refs)     & compare) reject FPs)
 
-                          OPS:  LangFuse traces · cost/latency per run · FastAPI + SSE · Docker
+                          OPS:  LangFuse traces · cost/latency per run · FastAPI + SSE · Streamlit UI · Docker
                           EVAL: golden set + seeded contradictions · Ragas + LLM-judge
                                 in pytest · GitHub Actions gate
 ```
@@ -90,7 +90,11 @@ cp .env.example .env                    # add API keys
 requirements-audit ingest corpus/       # build the index
 requirements-audit query "What is the watchdog timeout?"
 requirements-audit audit                # sweep for contradictions
+
+make ui                                 # optional: launch the Streamlit UI
 ```
+
+The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client over the same API) offers the same ingest / query / audit flows for non-terminal use and the demo.
 
 ## Scope
 
@@ -100,21 +104,21 @@ requirements-audit audit                # sweep for contradictions
 - Four-agent pipeline (Planner → Retriever → Analyst → Critic) in PydanticAI
 - Evaluation harness with golden set, contradiction ground truth, Ragas, calibrated LLM-judge, CI gate
 - FastAPI + SSE, Docker compose, LangFuse tracing, provider fallback (Anthropic ↔ OpenAI)
-- n8n workflow for ingestion webhook integration
+- Streamlit UI — a thin client over the API for ingest, query, and audit
 
 **Deliberately out of scope (roadmap):**
 - Graph store (Neo4j) — SQLite reference tables cover contradiction pairing at MVP scale
-- Polished frontend — CLI and a demo recording are the deliverable
+- Heavyweight custom frontend (SPA) — the CLI is primary and a lightweight Streamlit UI covers visual use
+- n8n folder/webhook ingestion automation — paused, revisit post-MVP
 - Fine-tuning, self-hosted models, authentication, multi-tenancy
 
 ## Repository layout
 
 ```
 requirements-audit/
-├── src/requirements_audit/   # ingestion, agents, tools, retrieval, llm, api
+├── src/requirements_audit/   # ingestion, agents, tools, retrieval, llm, api, ui
 ├── evals/                    # golden_set.json, contradictions.json, test_*.py
 ├── corpus/                   # synthetic requirements + public AUTOSAR excerpts
-├── n8n/                      # exported workflow JSON + screenshot
 ├── .github/workflows/ci.yml  # lint → unit → eval gate → build
 ├── docker-compose.yml        # api + qdrant + langfuse
 └── README.md
