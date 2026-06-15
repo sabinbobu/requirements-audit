@@ -1,6 +1,6 @@
 # Canonical commands. Run `make help` to list them.
 .DEFAULT_GOAL := help
-.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean ingest query audit
+.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -49,6 +49,9 @@ logs: ## Tail dev service logs
 
 clean: ## Remove caches and build artifacts
 	rm -rf .pytest_cache .ruff_cache .mypy_cache dist build *.egg-info
+
+corpus: ## Regenerate the synthetic corpus + ground-truth files (deterministic)
+	uv run python -m requirements_audit.corpus
 
 ingest: ## Build the index from a corpus (CORPUS=corpus/)
 	uv run requirements-audit ingest $(or $(CORPUS),corpus/)
