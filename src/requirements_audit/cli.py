@@ -43,9 +43,27 @@ def _root(
 @app.command()
 def ingest(
     corpus: Path = typer.Argument(..., help="Directory of documents to index."),
+    db: Path = typer.Option(Path("data/requirements.sqlite"), "--db", help="SQLite store path."),
 ) -> None:
-    """Parse, chunk, and index a corpus into Qdrant + the SQLite entity store."""
-    raise typer.Exit(_not_implemented("ingest"))
+    """Parse, chunk, and extract a corpus into the SQLite store (idempotent)."""
+    from requirements_audit.ingestion.pipeline import ingest_corpus
+    from requirements_audit.ingestion.store import SqliteStore
+
+    if not corpus.is_dir():
+        typer.secho(f"Corpus directory not found: {corpus}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+    with SqliteStore(db) as store:
+        report = ingest_corpus(corpus, store)
+
+    typer.echo(
+        f"Documents: {len(report.new_docs)} new, {len(report.updated_docs)} updated, "
+        f"{len(report.unchanged_docs)} unchanged."
+    )
+    typer.echo(
+        f"Store now holds {report.chunks} chunks, {report.entities} entities, "
+        f"{report.refs} references ({report.unresolved_refs} unresolved)."
+    )
 
 
 @app.command()

@@ -37,6 +37,13 @@ class RequirementStatus(StrEnum):
     SUPERSEDED = "superseded"
 
 
+class EntityType(StrEnum):
+    """What an extracted entity refers to."""
+
+    REQUIREMENT = "requirement"
+    PARAMETER = "parameter"
+
+
 class Requirement(BaseModel):
     """A single requirement statement with its structural context."""
 
@@ -61,6 +68,42 @@ class RequirementDocument(BaseModel):
     title: str
     doc_type: str
     requirements: list[Requirement]
+
+
+class Chunk(BaseModel):
+    """A retrievable unit. One chunk per requirement keeps the requirement ID and its
+    section hierarchy attached — structure-aware chunking for this corpus.
+    """
+
+    id: str
+    doc_id: str
+    requirement_id: str
+    section_path: list[str]
+    title: str
+    text: str
+    content_hash: str
+    parameters: dict[str, str] = Field(default_factory=dict)
+    status: RequirementStatus = RequirementStatus.ACTIVE
+
+
+class Entity(BaseModel):
+    """A requirement ID or a named parameter extracted from a requirement."""
+
+    name: str
+    entity_type: EntityType
+    requirement_id: str
+    doc_id: str
+    value: str | None = None
+
+
+class CrossRef(BaseModel):
+    """A reference from one requirement to another. resolved is False when the target
+    is not present in the corpus (a dangling reference, to be flagged).
+    """
+
+    from_req: str
+    to_req: str
+    resolved: bool
 
 
 class Contradiction(BaseModel):
