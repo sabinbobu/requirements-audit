@@ -2,7 +2,7 @@
 
 > A multi-agent system over engineering specification documents that answers requirement queries with citations and **detects contradictions between requirements across documents** — with a measured evaluation harness, not vibes.
 
-**Status:** scaffolding in progress. No runnable code yet.
+**Status:** Phases A–C complete. `ingest`, `query`, and `audit` run from the CLI; the four-agent pipeline (Planner → Retriever → Analyst → Critic) is wired with LangFuse-style tracing. Contradiction recall on the numeric + superseded classes is gated in CI with no API keys; the prose (`incompatible_constraint`) class adds the LLM comparator. Eval harness, benchmarks, API/UI: Phases D–G.
 
 ---
 
@@ -81,18 +81,19 @@ The CI eval gate fails the build when faithfulness or contradiction recall drops
 
 ## Quickstart
 
-> Not yet runnable — scaffolding in progress. The intended interface:
-
 ```bash
-docker compose up -d                    # qdrant + langfuse local
 uv sync                                 # install pinned deps
-cp .env.example .env                    # add API keys
-requirements-audit ingest corpus/       # build the index
-requirements-audit query "What is the watchdog timeout?"
-requirements-audit audit                # sweep for contradictions
+cp .env.example .env                    # add API keys (needed for query + full audit)
+requirements-audit ingest corpus/       # build the index (no keys needed)
+requirements-audit audit --no-llm       # deterministic sweep: numeric + superseded conflicts, no keys
+requirements-audit query "What is the watchdog timeout?"   # Q&A with citations (needs a key)
+requirements-audit audit                # full sweep incl. prose conflicts (needs a key)
 
-make ui                                 # optional: launch the Streamlit UI
+make ui                                 # optional: launch the Streamlit UI (Phase G)
 ```
+
+`audit --no-llm` and the whole eval gate run offline; `query` and the full `audit`
+call an LLM (Anthropic primary, OpenAI fallback) and require an API key.
 
 The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client over the same API) offers the same ingest / query / audit flows for non-terminal use and the demo.
 
