@@ -1,0 +1,202 @@
+[
+  {
+    "id": "C01",
+    "req_a": "SYS-REQ-0101",
+    "req_b": "SWC-REQ-0101",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "The watchdog supervision timeout shall be 100 ms",
+    "evidence_quote_b": "the watchdog supervision timeout is 250 ms",
+    "rationale": "Same watchdog timeout parameter specified with two different values (100 ms vs 250 ms).",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C02",
+    "req_a": "COM-REQ-0101",
+    "req_b": "SUP-REQ-0101",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "The primary CAN bus shall operate at 500 kbit/s",
+    "evidence_quote_b": "maximum CAN bit rate of 250 kbit/s",
+    "rationale": "Required CAN bit rate exceeds the supplied controller's maximum capability.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C03",
+    "req_a": "SYS-REQ-0102",
+    "req_b": "PWR-REQ-0101",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "within 800 ms of power-on",
+    "evidence_quote_b": "completes within 1200 ms",
+    "rationale": "Boot-time budget stated as 800 ms in one document and 1200 ms in another.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C04",
+    "req_a": "PWR-REQ-0102",
+    "req_b": "SUP-REQ-0102",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "down to a supply voltage of 9.0 V",
+    "evidence_quote_b": "minimum supply voltage of 10.5 V",
+    "rationale": "System demands operation below the supplier's rated minimum voltage.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C05",
+    "req_a": "DIAG-REQ-0101",
+    "req_b": "SWC-REQ-0102",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "store up to 512 confirmed DTC entries",
+    "evidence_quote_b": "dimensioned for 256 entries",
+    "rationale": "Diagnostic memory capacity specified as 512 entries versus 256 entries.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C06",
+    "req_a": "SAFE-REQ-0101",
+    "req_b": "SUP-REQ-0103",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "operational at ambient temperatures down to -40 degC",
+    "evidence_quote_b": "not rated for operation below -20 degC",
+    "rationale": "Safety demands operation to -40 degC but a supplied component is unrated below -20 degC.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C07",
+    "req_a": "SYS-REQ-0103",
+    "req_b": "SWC-REQ-0103",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "receive a response within 50 ms",
+    "evidence_quote_b": "at least 80 ms of processing time before a response",
+    "rationale": "Required 50 ms response is unachievable given a mandated 80 ms minimum processing time.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C08",
+    "req_a": "SAFE-REQ-0102",
+    "req_b": "SYS-REQ-0104",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "dual redundant processing channels",
+    "evidence_quote_b": "single-controller architecture with no redundant processing channel",
+    "rationale": "ASIL-D redundancy requirement is incompatible with the single-controller architecture.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C09",
+    "req_a": "PWR-REQ-0103",
+    "req_b": "COM-REQ-0102",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "shall not exceed 100 uA",
+    "evidence_quote_b": "drawing approximately 5 mA",
+    "rationale": "A 5 mA transceiver sleep draw cannot meet the 100 uA quiescent-current budget.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C10",
+    "req_a": "SAFE-REQ-0103",
+    "req_b": "DIAG-REQ-0102",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "require successful security authentication before any service is executed",
+    "evidence_quote_b": "permits reading stored DTCs without authentication",
+    "rationale": "Mandatory authentication for every session conflicts with unauthenticated default-session reads.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C11",
+    "req_a": "SWC-REQ-0104",
+    "req_b": "SYS-REQ-0105",
+    "conflict_type": "superseded_reference",
+    "evidence_quote_a": "as specified in SYS-REQ-0105",
+    "evidence_quote_b": "This requirement is superseded by SYS-REQ-0140",
+    "rationale": "An active requirement depends on SYS-REQ-0105, which has been superseded.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C12",
+    "req_a": "DIAG-REQ-0103",
+    "req_b": "COM-REQ-0103",
+    "conflict_type": "superseded_reference",
+    "evidence_quote_a": "the transport timing of COM-REQ-0103",
+    "evidence_quote_b": "This requirement is superseded by COM-REQ-0145",
+    "rationale": "Diagnostic timing depends on COM-REQ-0103, which has been superseded.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C13",
+    "req_a": "SUP-REQ-0104",
+    "req_b": "SAFE-REQ-0104",
+    "conflict_type": "superseded_reference",
+    "evidence_quote_a": "the safety case defined in SAFE-REQ-0104",
+    "evidence_quote_b": "This requirement is superseded by SAFE-REQ-0150",
+    "rationale": "A supplier requirement conforms to SAFE-REQ-0104, which has been superseded.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C14",
+    "req_a": "HMI-REQ-0101",
+    "req_b": "PWR-REQ-0104",
+    "conflict_type": "superseded_reference",
+    "evidence_quote_a": "shall align with PWR-REQ-0104",
+    "evidence_quote_b": "This requirement is superseded by PWR-REQ-0160",
+    "rationale": "An HMI requirement aligns to PWR-REQ-0104, which has been superseded.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "C15",
+    "req_a": "SWC-REQ-0105",
+    "req_b": "DIAG-REQ-0104",
+    "conflict_type": "superseded_reference",
+    "evidence_quote_a": "the signal set defined in DIAG-REQ-0104",
+    "evidence_quote_b": "This requirement is superseded by DIAG-REQ-0110",
+    "rationale": "A software requirement reuses DIAG-REQ-0104, which has been superseded.",
+    "is_true_conflict": true
+  },
+  {
+    "id": "N01",
+    "req_a": "SYS-REQ-0106",
+    "req_b": "SWC-REQ-0106",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "In normal operating mode the watchdog timeout shall be 100 ms",
+    "evidence_quote_b": "In extended diagnostic mode the watchdog timeout shall be 250 ms",
+    "rationale": "Different values but explicitly mode-qualified — not a contradiction.",
+    "is_true_conflict": false
+  },
+  {
+    "id": "N02",
+    "req_a": "PWR-REQ-0105",
+    "req_b": "SUP-REQ-0105",
+    "conflict_type": "numeric_mismatch",
+    "evidence_quote_a": "The nominal supply voltage is 12 V",
+    "evidence_quote_b": "supply range of 9 V to 16 V",
+    "rationale": "12 V nominal falls inside the 9-16 V supplier range — consistent.",
+    "is_true_conflict": false
+  },
+  {
+    "id": "N03",
+    "req_a": "HMI-REQ-0102",
+    "req_b": "SYS-REQ-0140",
+    "conflict_type": "superseded_reference",
+    "evidence_quote_a": "in line with SYS-REQ-0140",
+    "evidence_quote_b": "Boot completion shall be indicated to the driver within 1500 ms",
+    "rationale": "Reference points to the active replacement requirement, not a superseded one — consistent.",
+    "is_true_conflict": false
+  },
+  {
+    "id": "N04",
+    "req_a": "SYS-REQ-0107",
+    "req_b": "SAFE-REQ-0105",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "operate from -40 degC to +85 degC",
+    "evidence_quote_b": "operating temperature range is -40 degC to +85 degC",
+    "rationale": "Identical temperature ranges stated in two documents — consistent.",
+    "is_true_conflict": false
+  },
+  {
+    "id": "N05",
+    "req_a": "SYS-REQ-0108",
+    "req_b": "SWC-REQ-0107",
+    "conflict_type": "incompatible_constraint",
+    "evidence_quote_a": "returned within 100 ms",
+    "evidence_quote_b": "completes in a typical 40 ms",
+    "rationale": "40 ms typical duration comfortably meets the 100 ms budget — consistent.",
+    "is_true_conflict": false
+  }
+]

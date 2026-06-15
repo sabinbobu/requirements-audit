@@ -1,0 +1,479 @@
+[
+  {
+    "id": "GQ-0001",
+    "question": "When must boot completion be indicated to the driver?",
+    "expected_source_ids": [
+      "SYS-REQ-0140"
+    ],
+    "expected_facts": [
+      "1500 ms"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0002",
+    "question": "What speed does the diagnostic Ethernet link operate at?",
+    "expected_source_ids": [
+      "COM-REQ-0110"
+    ],
+    "expected_facts": [
+      "100 Mbit/s"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0003",
+    "question": "How many signal values does freeze-frame data capture?",
+    "expected_source_ids": [
+      "DIAG-REQ-0110"
+    ],
+    "expected_facts": [
+      "8"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0004",
+    "question": "After how long of bus inactivity does the ECU enter sleep mode?",
+    "expected_source_ids": [
+      "PWR-REQ-0110"
+    ],
+    "expected_facts": [
+      "4 seconds"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0005",
+    "question": "What is the maximum fault reaction time for ASIL-B functions?",
+    "expected_source_ids": [
+      "SAFE-REQ-0110"
+    ],
+    "expected_facts": [
+      "200 ms"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0006",
+    "question": "What cyclic task periods is the application software partitioned into?",
+    "expected_source_ids": [
+      "SWC-REQ-0110"
+    ],
+    "expected_facts": [
+      "10 ms",
+      "50 ms"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0007",
+    "question": "What minimum flash endurance must the supplier deliver?",
+    "expected_source_ids": [
+      "SUP-REQ-0110"
+    ],
+    "expected_facts": [
+      "100000"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0008",
+    "question": "What minimum luminance is required for warning telltales?",
+    "expected_source_ids": [
+      "HMI-REQ-0110"
+    ],
+    "expected_facts": [
+      "200 cd/m2"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0009",
+    "question": "What is the maximum over-the-air software update size?",
+    "expected_source_ids": [
+      "SYS-REQ-0150"
+    ],
+    "expected_facts": [
+      "64 MB"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0010",
+    "question": "What is the CAN transport layer timeout?",
+    "expected_source_ids": [
+      "COM-REQ-0145"
+    ],
+    "expected_facts": [
+      "1500 ms"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0011",
+    "question": "What supervision concept does the safety concept require?",
+    "expected_source_ids": [
+      "SAFE-REQ-0150"
+    ],
+    "expected_facts": [
+      "watchdog",
+      "program-flow monitoring"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0012",
+    "question": "Within how long must startup inrush current settle?",
+    "expected_source_ids": [
+      "PWR-REQ-0160"
+    ],
+    "expected_facts": [
+      "250 ms"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0013",
+    "question": "After how long does an inactive diagnostic session time out?",
+    "expected_source_ids": [
+      "DIAG-REQ-0120"
+    ],
+    "expected_facts": [
+      "5 seconds"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0014",
+    "question": "What block size is used for non-volatile data storage?",
+    "expected_source_ids": [
+      "SWC-REQ-0120"
+    ],
+    "expected_facts": [
+      "256 bytes"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0015",
+    "question": "How long after a bus-off event does the node attempt recovery?",
+    "expected_source_ids": [
+      "COM-REQ-0150"
+    ],
+    "expected_facts": [
+      "100 ms"
+    ],
+    "scenario": "success"
+  },
+  {
+    "id": "GQ-0016",
+    "question": "Is there a conflict regarding watchdog supervision timeout?",
+    "expected_source_ids": [
+      "SYS-REQ-0101",
+      "SWC-REQ-0101"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0017",
+    "question": "Is there a conflict regarding primary CAN bit rate?",
+    "expected_source_ids": [
+      "COM-REQ-0101",
+      "SUP-REQ-0101"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0018",
+    "question": "Is there a conflict regarding operational readiness time?",
+    "expected_source_ids": [
+      "SYS-REQ-0102",
+      "PWR-REQ-0101"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0019",
+    "question": "Is there a conflict regarding minimum operating voltage?",
+    "expected_source_ids": [
+      "PWR-REQ-0102",
+      "SUP-REQ-0102"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0020",
+    "question": "Is there a conflict regarding dTC storage capacity?",
+    "expected_source_ids": [
+      "DIAG-REQ-0101",
+      "SWC-REQ-0102"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0021",
+    "question": "Is there a conflict regarding low-temperature operation?",
+    "expected_source_ids": [
+      "SAFE-REQ-0101",
+      "SUP-REQ-0103"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0022",
+    "question": "Is there a conflict regarding diagnostic response time?",
+    "expected_source_ids": [
+      "SYS-REQ-0103",
+      "SWC-REQ-0103"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0023",
+    "question": "Is there a conflict regarding redundancy for ASIL-D?",
+    "expected_source_ids": [
+      "SAFE-REQ-0102",
+      "SYS-REQ-0104"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0024",
+    "question": "Is there a conflict regarding sleep quiescent current?",
+    "expected_source_ids": [
+      "PWR-REQ-0103",
+      "COM-REQ-0102"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0025",
+    "question": "Is there a conflict regarding diagnostic authentication?",
+    "expected_source_ids": [
+      "SAFE-REQ-0103",
+      "DIAG-REQ-0102"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0026",
+    "question": "Is there a conflict regarding startup sequence dependency?",
+    "expected_source_ids": [
+      "SWC-REQ-0104",
+      "SYS-REQ-0105"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0027",
+    "question": "Is there a conflict regarding transport timing dependency?",
+    "expected_source_ids": [
+      "DIAG-REQ-0103",
+      "COM-REQ-0103"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0028",
+    "question": "Is there a conflict regarding safety compliance reference?",
+    "expected_source_ids": [
+      "SUP-REQ-0104",
+      "SAFE-REQ-0104"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0029",
+    "question": "Is there a conflict regarding startup display dependency?",
+    "expected_source_ids": [
+      "HMI-REQ-0101",
+      "PWR-REQ-0104"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0030",
+    "question": "Is there a conflict regarding freeze-frame dependency?",
+    "expected_source_ids": [
+      "SWC-REQ-0105",
+      "DIAG-REQ-0104"
+    ],
+    "expected_facts": [],
+    "scenario": "contradictory_result"
+  },
+  {
+    "id": "GQ-0031",
+    "question": "What are the requirements related to the watchdog supervision timeout?",
+    "expected_source_ids": [
+      "SYS-REQ-0101",
+      "SWC-REQ-0101",
+      "SYS-REQ-0106",
+      "SWC-REQ-0106"
+    ],
+    "expected_facts": [],
+    "scenario": "multi_result"
+  },
+  {
+    "id": "GQ-0032",
+    "question": "Which requirements specify CAN communication parameters?",
+    "expected_source_ids": [
+      "COM-REQ-0101",
+      "SUP-REQ-0101",
+      "COM-REQ-0145",
+      "COM-REQ-0150"
+    ],
+    "expected_facts": [],
+    "scenario": "multi_result"
+  },
+  {
+    "id": "GQ-0033",
+    "question": "What requirements constrain the ECU supply voltage?",
+    "expected_source_ids": [
+      "PWR-REQ-0102",
+      "SUP-REQ-0102",
+      "PWR-REQ-0105",
+      "SUP-REQ-0105"
+    ],
+    "expected_facts": [],
+    "scenario": "multi_result"
+  },
+  {
+    "id": "GQ-0034",
+    "question": "Which requirements address diagnostic timing?",
+    "expected_source_ids": [
+      "SYS-REQ-0103",
+      "SWC-REQ-0103",
+      "SYS-REQ-0108",
+      "SWC-REQ-0107"
+    ],
+    "expected_facts": [],
+    "scenario": "multi_result"
+  },
+  {
+    "id": "GQ-0035",
+    "question": "What is the maximum towing capacity of the vehicle?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "no_result"
+  },
+  {
+    "id": "GQ-0036",
+    "question": "Which tire pressure is recommended for winter driving?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "no_result"
+  },
+  {
+    "id": "GQ-0037",
+    "question": "What is the warranty period for the infotainment head unit?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "no_result"
+  },
+  {
+    "id": "GQ-0038",
+    "question": "How many cup holders does the center console provide?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "no_result"
+  },
+  {
+    "id": "GQ-0039",
+    "question": "What is the curb weight of the vehicle?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "no_result"
+  },
+  {
+    "id": "GQ-0040",
+    "question": "What paint colors are offered for the exterior?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "no_result"
+  },
+  {
+    "id": "GQ-0041",
+    "question": "What is the exact maximum CAN message latency in milliseconds?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "missing_data"
+  },
+  {
+    "id": "GQ-0042",
+    "question": "What is the precise quiescent current target for Ethernet in sleep mode?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "missing_data"
+  },
+  {
+    "id": "GQ-0043",
+    "question": "What is the maximum number of concurrent diagnostic sessions?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "missing_data"
+  },
+  {
+    "id": "GQ-0044",
+    "question": "What CPU clock frequency is specified for the controller?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "missing_data"
+  },
+  {
+    "id": "GQ-0045",
+    "question": "What is the specified mean time between failures (MTBF) of the ECU?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "missing_data"
+  },
+  {
+    "id": "GQ-0046",
+    "question": "What is the exact RAM size allocated to the diagnostic stack?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "missing_data"
+  },
+  {
+    "id": "GQ-0047",
+    "question": "Which engineers are authorized to approve changes to the safety requirements?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "permission_edge"
+  },
+  {
+    "id": "GQ-0048",
+    "question": "Who has write access to the supplier interface document?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "permission_edge"
+  },
+  {
+    "id": "GQ-0049",
+    "question": "What clearance level is required to read the security requirements?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "permission_edge"
+  },
+  {
+    "id": "GQ-0050",
+    "question": "Which team owns the approval workflow for diagnostic sessions?",
+    "expected_source_ids": [],
+    "expected_facts": [],
+    "scenario": "permission_edge"
+  }
+]
