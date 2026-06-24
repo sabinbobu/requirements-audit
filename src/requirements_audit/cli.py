@@ -1,12 +1,8 @@
-"""Command-line interface for requirements-audit.
-
-The commands below mirror the Quickstart in the README. They are intentional
-stubs for now — Phase 1 establishes the entry point and the contract; the
-implementations land in later phases (ingestion, retrieval, agents, eval).
-"""
+"""Command-line interface for requirements-audit."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -151,6 +147,57 @@ def audit(
         f"\n{len(report.findings)} finding(s) from {report.candidates_considered} candidate(s); "
         f"{report.rejected_by_critic} rejected by the Critic."
     )
+
+
+@app.command()
+def benchmark(
+    db: Path = typer.Option(Path("data/requirements.sqlite"), "--db", help="SQLite store path."),
+    golden_set: Path = typer.Option(
+        Path("evals/golden_set.json"), "--golden-set", help="Golden questions JSON path."
+    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write JSON report to a file."),
+    k: int = typer.Option(5, "--k", min=1, help="Top-k retrieval cutoff."),
+    strategies: list[str] | None = typer.Option(
+        None,
+        "--strategy",
+        "-s",
+        help="Retrieval strategy to include; repeatable. Defaults to lexical.",
+    ),
+) -> None:
+    """Run Phase E retrieval benchmarks and emit a JSON report."""
+    from requirements_audit.eval.benchmark import (
+        RetrievalStrategy,
+        load_golden_questions,
+        run_retrieval_benchmark,
+        write_report,
+    )
+    from requirements_audit.ingestion.store import SqliteStore
+
+    try:
+        selected = [RetrievalStrategy(s) for s in strategies] if strategies else None
+    except ValueError as exc:
+        valid = ", ".join(s.value for s in RetrievalStrategy)
+        typer.secho(
+            f"Unknown strategy: {exc}. Valid strategies: {valid}", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(1) from exc
+
+    questions = load_golden_questions(golden_set)
+    with SqliteStore(db) as store:
+        if store.chunk_count() == 0:
+            typer.secho(
+                f"No chunks found in {db}; run `requirements-audit ingest corpus/ --db {db}` first.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+        report = run_retrieval_benchmark(store, questions, strategies=selected, k=k)
+
+    if output is not None:
+        write_report(report, output)
+        typer.echo(f"Wrote benchmark report to {output}")
+    else:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
 
 
 if __name__ == "__main__":

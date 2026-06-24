@@ -166,7 +166,7 @@ def test_committed_ground_truth_matches_generator(
     contradictions: list[Contradiction], questions: list[GoldenQuestion]
 ) -> None:
     """Guards that someone regenerated (`make corpus`) after editing the spec."""
-    on_disk_c = json.loads((_ROOT / "evals" / "contradictions.json").read_text())
-    on_disk_q = json.loads((_ROOT / "evals" / "golden_set.json").read_text())
+    on_disk_c = json.loads((_ROOT / "evals" / "contradictions.json").read_text(encoding="utf-8"))
+    on_disk_q = json.loads((_ROOT / "evals" / "golden_set.json").read_text(encoding="utf-8"))
     assert on_disk_c == [c.model_dump(mode="json") for c in contradictions]
     assert on_disk_q == [q.model_dump(mode="json") for q in questions]

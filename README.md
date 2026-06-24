@@ -90,6 +90,7 @@ The LLM-judge is calibrated against `evals/judge_labels.json` (30 items) and rep
 uv sync                                 # install pinned deps
 cp .env.example .env                    # add API keys (needed for query + full audit)
 requirements-audit ingest corpus/       # build the index (no keys needed)
+requirements-audit benchmark            # record BM25 retrieval baseline (no keys needed)
 requirements-audit audit --no-llm       # deterministic sweep: numeric + superseded conflicts, no keys
 requirements-audit query "What is the watchdog timeout?"   # Q&A with citations (needs a key)
 requirements-audit audit                # full sweep incl. prose conflicts (needs a key)

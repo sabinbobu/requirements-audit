@@ -44,9 +44,8 @@ jobs:
       - name: Unit tests
         run: uv run pytest -m "not eval"
 
-      # The eval gate grows into the senior signal (golden set, contradiction
-      # recall, Ragas, calibrated judge). Today it is a green placeholder; it
-      # must stay wired so regressions fail the build once the harness lands.
+      # Keyless deterministic evals: retrieval P/R, contradiction recall, and
+      # L1 assertions. Live Ragas/judge/full-audit evals run in eval-nightly.yml.
       - name: Eval gate
         run: uv run pytest -m eval
 

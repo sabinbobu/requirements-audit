@@ -1,6 +1,6 @@
 # Canonical commands. Run `make help` to list them.
 .DEFAULT_GOAL := help
-.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit
+.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -61,3 +61,6 @@ query: ## Ask a question (Q="...")
 
 audit: ## Sweep the corpus for contradictions
 	uv run requirements-audit audit
+
+benchmark: ## Run retrieval benchmarks (DB=data/requirements.sqlite, OUT=)
+	uv run requirements-audit benchmark --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),)
