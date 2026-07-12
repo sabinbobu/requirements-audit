@@ -2,7 +2,7 @@
 
 > A multi-agent system over engineering specification documents that answers requirement queries with citations and **detects contradictions between requirements across documents** — with a measured evaluation harness, not vibes.
 
-**Status:** Phases A–D complete; Phase E measured keyless (four retrieval strategies + chunk-size sweep; live-embedding and provider cost/latency runs pending); Phases F–G in place. The FastAPI app serves `/healthz`, `/ingest`, `/audit`, and `/query` (SSE: live pipeline-stage events, then the answer + per-stage latencies); `docker compose up` starts api + qdrant + langfuse; `make ui` launches the Streamlit thin client (ingest / query / audit views over the same API). Keyless requests get the deterministic audit; `/query` needs an LLM key. Remaining: live benchmark runs, cost capture, demo assets, README results tables (Phase H).
+**Status:** Phases A–H implemented. Everything below — corpus, ingestion, four-agent pipeline, two-tier eval gate, four measured retrieval strategies, chunk-size sweep, FastAPI ops layer with SSE + per-request cost/latency, Docker, Streamlit UI — runs and is tested **without API keys**; the numbers tables mark exactly which rows still need a live (keyed) run. Remaining manual steps: the live/nightly runs, the bad-prompt CI-failure demo PR, and the Loom.
 
 ---
 
@@ -41,6 +41,30 @@ docs (ARXML, MD, PDF) ──► INGESTION (parse → structure-aware chunk → e
                                 in pytest · GitHub Actions gate
 ```
 
+Rendered view of the same architecture:
+
+```mermaid
+flowchart LR
+    docs["docs (MD · ARXML · PDF)"] --> ing["INGESTION<br/>parse → chunk → extract"]
+    ing --> qd[("Qdrant<br/>dense + BM25")]
+    ing --> sq[("SQLite<br/>entities · refs · ledger")]
+
+    q["query / audit"] --> planner
+    subgraph orch["ORCHESTRATOR · PydanticAI · budgets · tracing"]
+        planner[Planner] --> retriever[Retriever]
+        retriever --> analyst[Analyst]
+        analyst --> critic[Critic]
+    end
+    retriever -.tools.-> qd
+    retriever -.tools.-> sq
+    critic --> out["answer + citations<br/>OR finding report + human gate"]
+
+    orch -.traces · cost · latency.-> lf["LangFuse"]
+    api["FastAPI + SSE"] --> orch
+    ui["Streamlit (thin client)"] --> api
+    cli["CLI"] --> orch
+```
+
 **Agent roles**
 - **Planner** — routes Q&A vs audit; decomposes complex queries.
 - **Retriever** — typed tools over Qdrant: `hybrid_search`, `get_section`, `find_refs`.
@@ -73,16 +97,42 @@ The eval gate runs in two tiers (thresholds live in `evals/thresholds.yaml`):
 
 The LLM-judge is calibrated against `evals/judge_labels.json` (30 items) and reported as precision/recall, not raw agreement. Those labels are **construction-derived from the synthetic corpus** (seeded conflicts → yes, near-misses and clearly-unrelated pairs → no), not blind third-party human labels — the same synthetic-corpus tradeoff disclosed above, chosen so the calibration number is reproducible and versioned.
 
-## Numbers (to be filled by benchmarking phase)
+## Numbers
 
-| Metric | Value |
-|---|---|
-| Context precision@5 — naive vs hybrid vs hybrid+rerank | _TBD_ |
-| Ragas faithfulness on golden set | _TBD_ |
-| Contradiction precision / recall — before vs after Critic | _TBD_ |
-| False-positive rate eliminated by Critic stage | _TBD_ |
-| Cost per query / per full audit (Anthropic vs OpenAI) | _TBD_ |
-| p95 latency per agent stage | _TBD_ |
+Everything below reproduces offline with no API keys (`make benchmark`, `make sweep`, `pytest -m eval`). Rows that require live LLM/embedding calls are marked and land via the nightly job / a keyed run.
+
+### Retrieval strategies (34 source-bearing golden questions, k=5)
+
+| Strategy | P@5 | R@5 | Notes |
+|---|---|---|---|
+| BM25 (lexical) | 0.312 | 0.926 | deterministic baseline, gated in CI |
+| Dense (in-process Qdrant) | 0.300 | 0.912 | hashing embedder — a lexical proxy, disclosed in the report |
+| Hybrid (RRF fusion) | 0.300 | 0.919 | deterministic given both arms |
+| Hybrid + term-coverage rerank | 0.306 | 0.926 | recovers fusion's recall loss |
+| Dense / hybrid with real embeddings | _live run pending_ | _live run pending_ | `--embedder openai`, pinned `text-embedding-3-small` |
+
+### Chunk-size sweep (coverage-based metrics — see `eval/sweep.py` for definitions)
+
+| Chunk budget | Chunks | P@5 | R@5 |
+|---|---|---|---|
+| per-requirement (production) | 180 | 0.312 | 0.926 |
+| 256 / 512 / 1024 tokens | 171 | 0.318 | 0.926 |
+| 32 tokens (exploratory) | 176 | 0.329 | 0.949 |
+
+**Finding (a deliberate negative result):** this corpus's sections are smaller than the smallest planned budget, so 256/512/1024 all converge to section-sized chunks and the sweep is flat. Per-requirement chunking loses nothing and keeps citations exact — so it stays.
+
+### Contradiction detection (15 seeded conflicts + 5 seeded near-misses)
+
+| Pipeline | Precision | Recall | Near-miss FP rate |
+|---|---|---|---|
+| Deterministic rules only (no LLM, gated in CI) | 0.917 | 0.733 (11/15) | 0/5 |
+| + LLM comparator & Critic (full pipeline) | _nightly / live run_ | _nightly / live run_ | _nightly / live run_ |
+
+The four conflicts the deterministic rules cannot reach are the prose `incompatible_constraint` cases (C07–C10) — that is precisely the LLM comparator's job, and the oracle wiring test proves the pipeline recovers 15/15 given correct judgements.
+
+### Cost & latency
+
+Per-request latency (per stage) and token usage with an estimated USD cost are captured on **every** run — in the CLI stats line, the API `trace` payload, and LangFuse when configured. Fleet numbers (cost per query / per full audit by provider, p95 per stage) require the live provider-comparison run: _pending, needs API keys_.
 
 ## Quickstart
 
@@ -105,6 +155,35 @@ call an LLM (Anthropic primary, OpenAI fallback) and require an API key.
 
 The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client over the same API) offers the same ingest / query / audit flows for non-terminal use and the demo.
 
+## Runbook
+
+| I want to… | Run |
+|---|---|
+| Install everything (dev + eval + ui) | `make install` |
+| Regenerate the synthetic corpus + ground truth | `make corpus` |
+| Build the index | `make ingest` (or `POST /ingest`) |
+| Ask a question | `make query Q="…"` (needs a key) |
+| Sweep for contradictions | `make audit` (keyless = deterministic classes) |
+| Benchmark retrieval strategies | `make benchmark STRATEGIES="lexical dense hybrid hybrid_rerank"` |
+| Run the chunk-size sweep | `make sweep` |
+| Serve the API | `make api` → http://localhost:8000 (OpenAPI docs at `/docs`) |
+| Launch the UI | `make ui` (API base URL via `REQUIREMENTS_AUDIT_API`) |
+| Start everything in Docker | `docker compose up -d` (api + qdrant + langfuse) |
+| Run what CI runs | `make check` · eval gate only: `make eval` |
+
+**Common failures:** `503` from `/query` = no LLM key configured (set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; the deterministic endpoints keep working keyless). "No chunks found" = run ingest first. Streamlit "port not available" = another app owns 8501; pass `--server.port`. CI format failures = run `make format` before committing.
+
+## Limitations (read before judging the numbers)
+
+- **The corpus is synthetic and the ground truth is construction-derived.** That's the point — precision/recall are measurable by construction — but it means the numbers characterize the *harness*, not performance on messy real-world specs. The judge calibration labels share this provenance (disclosed above).
+- **Keyless dense/hybrid numbers use a hashing embedder,** which is a lexical proxy: they demonstrate the wiring and a floor, not semantic retrieval. Every benchmark row names its embedder so the two can never be conflated.
+- **Ingestion currently consumes Markdown only.** The ARXML/PDF parser surface from the architecture is not wired into the pipeline glob; the synthetic corpus is Markdown.
+- **Requirement-atomic chunking** is validated on this corpus (see the sweep's negative result) but unvalidated on documents with long free-text requirements.
+- **Single-tenant, no auth, SQLite single-writer.** The API is a local/demo ops layer, not a hardened service.
+- **Human review decisions (accept/dismiss) are session-only** in the UI; they are not persisted through the API.
+- **SSE streams pipeline stages, not tokens.** Token-level streaming is roadmap.
+- English-only corpus and prompts.
+
 ## Scope
 
 **In scope for the MVP:**
@@ -121,18 +200,42 @@ The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client 
 - n8n folder/webhook ingestion automation — paused, revisit post-MVP
 - Fine-tuning, self-hosted models, authentication, multi-tenancy
 
+## Roadmap
+
+Ordered by what the measurements say matters next:
+
+1. **Live benchmark runs** — dense/hybrid with real OpenAI embeddings, Ragas + judge + full contradiction recall nightly, both providers through the full eval suite, cost/p95 fleet numbers. (Everything is wired; these need API keys and a scheduled run.)
+2. **Swap the agents' `hybrid_search`** to the winning retrieval strategy — only if the live numbers beat BM25 on this task.
+3. **Persist human review decisions** (accept/dismiss) through the API; today they are session-only in the UI.
+4. **Cross-encoder / LLM reranker** behind the same benchmark row that currently measures the term-coverage reranker.
+5. **Dense vectors at ingest time** against the served Qdrant (the benchmark embeds on the fly today).
+6. **Token-level SSE streaming** on `/query` (stages stream today).
+7. Wire ARXML/PDF parsing into the ingestion glob; n8n ingestion automation (paused); Neo4j when multi-hop traceability justifies it; auth + multi-tenancy.
+
 ## Repository layout
 
 ```
 requirements-audit/
-├── src/requirements_audit/   # ingestion, agents, tools, retrieval, llm, api, ui
-├── evals/                    # golden_set.json, contradictions.json, test_*.py
-├── corpus/                   # synthetic requirements + public AUTOSAR excerpts
-├── .github/workflows/ci.yml  # lint → unit → eval gate → build
-├── docker-compose.yml        # api + qdrant + langfuse
-└── README.md
+├── src/requirements_audit/
+│   ├── corpus/          # deterministic synthetic-corpus + ground-truth generator
+│   ├── ingestion/       # parser, requirement-atomic chunker, entity/ref extract, SQLite store
+│   ├── retrieval/       # lexical BM25 · dense (Qdrant) · RRF fusion · rerank · embedders
+│   ├── agents/          # Planner, Analyst, Comparator, Critic (PydanticAI)
+│   ├── tools/           # typed retrieval tools the Analyst calls
+│   ├── llm/             # provider abstraction + fallback, pinned pricing
+│   ├── eval/            # retrieval/contradiction/judge/Ragas metrics, benchmark, sweep
+│   ├── api/             # FastAPI ops layer (SSE /query)
+│   ├── ui/              # Streamlit thin client + typed API client
+│   ├── orchestrator.py  # the two entrypoints: answer_query, run_audit
+│   └── tracing.py       # in-memory RunTrace always; LangFuse export when keyed
+├── evals/               # golden_set.json, contradictions.json, judge_labels.json, eval gate tests
+├── corpus/              # the generated requirement documents (8 docs, 15 seeded conflicts)
+├── tests/               # unit + wiring tests (all keyless)
+├── .github/workflows/   # ci.yml (every commit, keyless) · eval-nightly.yml (live)
+├── Dockerfile           # the api image
+└── docker-compose.yml   # api + qdrant + langfuse
 ```
 
 ## License
 
-TBD — will be MIT.
+MIT — see [LICENSE](LICENSE).
