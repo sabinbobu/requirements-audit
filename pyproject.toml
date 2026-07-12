@@ -41,6 +41,11 @@ eval = [
     "ragas>=0.2",
     "langfuse>=2.50",
 ]
+# The Streamlit UI is a thin client over the API; kept out of the runtime deps
+# so the Docker API image stays lean. Install with: uv sync --group ui
+ui = [
+    "streamlit>=1.40",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -105,5 +110,7 @@ pretty = true
 files = ["src", "tests", "evals"]
 
 [[tool.mypy.overrides]]
-module = ["qdrant_client.*", "ragas.*", "langfuse.*"]
+# streamlit is in the optional `ui` group and not installed in CI; the UI app
+# is a thin, logic-free layer, so Any-typing its module is acceptable.
+module = ["qdrant_client.*", "ragas.*", "langfuse.*", "streamlit.*"]
 ignore_missing_imports = true

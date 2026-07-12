@@ -2,7 +2,7 @@
 
 > A multi-agent system over engineering specification documents that answers requirement queries with citations and **detects contradictions between requirements across documents** — with a measured evaluation harness, not vibes.
 
-**Status:** Phases A–D complete; Phase E measured keyless (four retrieval strategies + chunk-size sweep; live-embedding and provider cost/latency runs pending); Phase F ops layer in place. The FastAPI app serves `/healthz`, `/ingest`, `/audit`, and `/query` (SSE: live pipeline-stage events, then the answer + per-stage latencies), and `docker compose up` starts api + qdrant + langfuse. Keyless requests get the deterministic audit; `/query` needs an LLM key. Streamlit UI: Phase G.
+**Status:** Phases A–D complete; Phase E measured keyless (four retrieval strategies + chunk-size sweep; live-embedding and provider cost/latency runs pending); Phases F–G in place. The FastAPI app serves `/healthz`, `/ingest`, `/audit`, and `/query` (SSE: live pipeline-stage events, then the answer + per-stage latencies); `docker compose up` starts api + qdrant + langfuse; `make ui` launches the Streamlit thin client (ingest / query / audit views over the same API). Keyless requests get the deterministic audit; `/query` needs an LLM key. Remaining: live benchmark runs, cost capture, demo assets, README results tables (Phase H).
 
 ---
 
@@ -97,7 +97,7 @@ requirements-audit audit                # full sweep incl. prose conflicts (need
 
 make api                                # serve the FastAPI app on :8000 (SSE /query)
 docker compose up -d                    # or: api + qdrant + langfuse in one command
-make ui                                 # optional: launch the Streamlit UI (Phase G)
+make ui                                 # Streamlit thin client over the API (needs `make api` running)
 ```
 
 `audit --no-llm` and the whole eval gate run offline; `query` and the full `audit`
