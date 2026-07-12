@@ -163,8 +163,15 @@ def benchmark(
         "-s",
         help="Retrieval strategy to include; repeatable. Defaults to lexical.",
     ),
+    embedder: str = typer.Option(
+        "auto",
+        "--embedder",
+        help="Embedding backend for dense/hybrid: auto, hash, or openai. "
+        "auto = openai when OPENAI_API_KEY is set, else the deterministic hash embedder.",
+    ),
 ) -> None:
     """Run Phase E retrieval benchmarks and emit a JSON report."""
+    from requirements_audit.config import Settings
     from requirements_audit.eval.benchmark import (
         RetrievalStrategy,
         load_golden_questions,
@@ -172,6 +179,8 @@ def benchmark(
         write_report,
     )
     from requirements_audit.ingestion.store import SqliteStore
+    from requirements_audit.llm.provider import MissingCredentialsError
+    from requirements_audit.retrieval.embedding import EmbedderChoice, build_embedder
 
     try:
         selected = [RetrievalStrategy(s) for s in strategies] if strategies else None
@@ -182,6 +191,27 @@ def benchmark(
         )
         raise typer.Exit(1) from exc
 
+    # Only resolve an embedder when a selected strategy actually needs one, so
+    # the default lexical run never consults keys or builds a vector index.
+    needs_embedder = any(
+        s in (RetrievalStrategy.DENSE, RetrievalStrategy.HYBRID) for s in (selected or [])
+    )
+    resolved_embedder = None
+    if needs_embedder:
+        try:
+            resolved_embedder = build_embedder(Settings(), EmbedderChoice(embedder))
+        except ValueError as exc:
+            valid = ", ".join(c.value for c in EmbedderChoice)
+            typer.secho(
+                f"Unknown embedder: {embedder}. Valid embedders: {valid}",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1) from exc
+        except MissingCredentialsError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from exc
+
     questions = load_golden_questions(golden_set)
     with SqliteStore(db) as store:
         if store.chunk_count() == 0:
@@ -191,7 +221,9 @@ def benchmark(
                 err=True,
             )
             raise typer.Exit(1)
-        report = run_retrieval_benchmark(store, questions, strategies=selected, k=k)
+        report = run_retrieval_benchmark(
+            store, questions, strategies=selected, k=k, embedder=resolved_embedder
+        )
 
     if output is not None:
         write_report(report, output)

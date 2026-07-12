@@ -2,7 +2,7 @@
 
 > A multi-agent system over engineering specification documents that answers requirement queries with citations and **detects contradictions between requirements across documents** — with a measured evaluation harness, not vibes.
 
-**Status:** Phases A–C complete. `ingest`, `query`, and `audit` run from the CLI; the four-agent pipeline (Planner → Retriever → Analyst → Critic) is wired with LangFuse-style tracing. Contradiction recall on the numeric + superseded classes is gated in CI with no API keys; the prose (`incompatible_constraint`) class adds the LLM comparator. Eval harness, benchmarks, API/UI: Phases D–G.
+**Status:** Phases A–D complete; Phase E (benchmark & tune) in progress. `ingest`, `query`, `audit`, and `benchmark` run from the CLI; the four-agent pipeline (Planner → Retriever → Analyst → Critic) is wired with LangFuse-style tracing, and the two-tier eval gate (keyless CI + nightly live) is in place. Retrieval now has three measured strategies — BM25, dense (in-process Qdrant + pluggable embedder), and hybrid RRF fusion; reranking, the chunk-size sweep, and cost/latency numbers are next. API/UI: Phases F–G.
 
 ---
 
@@ -90,7 +90,7 @@ The LLM-judge is calibrated against `evals/judge_labels.json` (30 items) and rep
 uv sync                                 # install pinned deps
 cp .env.example .env                    # add API keys (needed for query + full audit)
 requirements-audit ingest corpus/       # build the index (no keys needed)
-requirements-audit benchmark            # record BM25 retrieval baseline (no keys needed)
+requirements-audit benchmark -s lexical -s dense -s hybrid   # retrieval benchmark (no keys: hash embedder; with OPENAI_API_KEY: real embeddings)
 requirements-audit audit --no-llm       # deterministic sweep: numeric + superseded conflicts, no keys
 requirements-audit query "What is the watchdog timeout?"   # Q&A with citations (needs a key)
 requirements-audit audit                # full sweep incl. prose conflicts (needs a key)

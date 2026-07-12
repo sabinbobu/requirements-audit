@@ -28,6 +28,27 @@ def test_retrieval_benchmark_measures_lexical_baseline(store: SqliteStore) -> No
     assert result.recall_at_k is not None
 
 
+def test_retrieval_benchmark_measures_dense_and_hybrid(store: SqliteStore) -> None:
+    """Dense + hybrid run keyless: the default embedder is the hashing one,
+    and each row's note must disclose that (no masquerading as semantic)."""
+    report = run_retrieval_benchmark(
+        store,
+        build_golden_set(),
+        strategies=[RetrievalStrategy.DENSE, RetrievalStrategy.HYBRID],
+    )
+
+    assert [r.strategy for r in report.retrieval] == [
+        RetrievalStrategy.DENSE,
+        RetrievalStrategy.HYBRID,
+    ]
+    for result in report.retrieval:
+        assert result.status is BenchmarkStatus.MEASURED
+        assert result.n_questions > 0
+        assert result.precision_at_k is not None
+        assert result.recall_at_k is not None
+        assert "hash" in result.note  # discloses the keyless embedder
+
+
 def test_retrieval_benchmark_marks_unimplemented_variants(store: SqliteStore) -> None:
     report = run_retrieval_benchmark(
         store,

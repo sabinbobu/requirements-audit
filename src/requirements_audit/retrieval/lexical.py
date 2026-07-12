@@ -1,12 +1,11 @@
 """Lexical retrieval: a small, dependency-free Okapi BM25 over the stored chunks.
 
 This is the *lexical arm* of what the architecture calls hybrid retrieval. The
-dense-embedding arm and Qdrant fusion are deferred to Phase E (Benchmark), which
-sweeps dense vs hybrid vs hybrid+rerank — so the tool keeps the name
-`hybrid_search` while this implementation is lexical-only. Being pure-Python and
-deterministic, it runs in CI with no services and no API keys.
-
-# BENCH: Phase E replaces / augments this with dense + BM25 fusion over Qdrant.
+dense arm (`retrieval.dense`) and RRF fusion (`retrieval.fusion`) exist behind
+the Phase E benchmark; the agent tool keeps the name `hybrid_search` but stays
+lexical-only until the benchmark numbers justify swapping it (eval-first: measure
+before switching the pipeline). Being pure-Python and deterministic, it runs in
+CI with no services and no API keys.
 """
 
 from __future__ import annotations
