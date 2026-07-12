@@ -1,6 +1,6 @@
 # Canonical commands. Run `make help` to list them.
 .DEFAULT_GOAL := help
-.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark sweep api
+.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark sweep api ui
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -70,3 +70,6 @@ sweep: ## Run the chunk-size sweep (DB=..., OUT=, SIZES="256 512 1024")
 
 api: ## Serve the FastAPI app locally with auto-reload (PORT=8000)
 	uv run uvicorn requirements_audit.api.app:app --reload --port $(or $(PORT),8000)
+
+ui: ## Launch the Streamlit UI (thin client; needs the API running — `make api`)
+	uv run --group ui streamlit run src/requirements_audit/ui/app.py
