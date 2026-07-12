@@ -230,5 +230,43 @@ def benchmark(
         typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
 
 
+@app.command("chunk-sweep")
+def chunk_sweep(
+    db: Path = typer.Option(Path("data/requirements.sqlite"), "--db", help="SQLite store path."),
+    golden_set: Path = typer.Option(
+        Path("evals/golden_set.json"), "--golden-set", help="Golden questions JSON path."
+    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Write JSON report to a file."),
+    k: int = typer.Option(5, "--k", min=1, help="Top-k retrieval cutoff."),
+    sizes: list[int] | None = typer.Option(
+        None,
+        "--size",
+        "-s",
+        help="Merge token budget to sweep; repeatable. Defaults to 256, 512, 1024.",
+    ),
+) -> None:
+    """Sweep chunk sizes (merged-requirement budgets) against the per-requirement baseline."""
+    from requirements_audit.eval.benchmark import load_golden_questions
+    from requirements_audit.eval.sweep import run_chunk_sweep, write_sweep_report
+    from requirements_audit.ingestion.store import SqliteStore
+
+    questions = load_golden_questions(golden_set)
+    with SqliteStore(db) as store:
+        if store.chunk_count() == 0:
+            typer.secho(
+                f"No chunks found in {db}; run `requirements-audit ingest corpus/ --db {db}` first.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+        report = run_chunk_sweep(store, questions, sizes=sizes, k=k)
+
+    if output is not None:
+        write_sweep_report(report, output)
+        typer.echo(f"Wrote chunk-sweep report to {output}")
+    else:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2))
+
+
 if __name__ == "__main__":
     app()

@@ -1,6 +1,6 @@
 # Canonical commands. Run `make help` to list them.
 .DEFAULT_GOAL := help
-.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark
+.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark sweep
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -64,3 +64,6 @@ audit: ## Sweep the corpus for contradictions
 
 benchmark: ## Run retrieval benchmarks (DB=..., OUT=, STRATEGIES="lexical dense hybrid", EMBEDDER=auto|hash|openai)
 	uv run requirements-audit benchmark --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),) $(foreach s,$(STRATEGIES),-s $(s)) $(if $(EMBEDDER),--embedder $(EMBEDDER),)
+
+sweep: ## Run the chunk-size sweep (DB=..., OUT=, SIZES="256 512 1024")
+	uv run requirements-audit chunk-sweep --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),) $(foreach s,$(SIZES),-s $(s))
