@@ -1,9 +1,36 @@
-# Local dev substrate: vector store + tracing.
-#   docker compose up -d        # start qdrant + langfuse
+# Local dev substrate: API + vector store + tracing.
+#   docker compose up -d        # start api + qdrant + langfuse
 #   docker compose down         # stop (volumes persist on disk, gitignored)
 name: requirements-audit
 
 services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Keys flow in from the host env / .env; absent keys are fine — the
+      # deterministic endpoints (/healthz, /ingest, /audit) work keyless.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    volumes:
+      - ./data:/app/data # SQLite store persists across restarts
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   qdrant:
     image: qdrant/qdrant:latest
     ports:

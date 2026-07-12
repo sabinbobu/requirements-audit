@@ -51,6 +51,11 @@ class Tracer:
         finally:
             record.latency_ms = (time.perf_counter() - start) * 1000.0
             self.trace.steps.append(record)
+            self._emit(record)
+
+    def _emit(self, record: StepRecord) -> None:
+        """Hook: subclasses observe each step as it completes (the API's SSE
+        endpoint streams these live). The base tracer does nothing."""
 
     def finish(self, **outputs: Any) -> RunTrace:
         self.trace.metadata.update(outputs)
