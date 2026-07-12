@@ -77,13 +77,16 @@ def _finish_with_usage(tracer: Tracer, settings: Settings, **outputs: Any) -> Ru
     for step in tracer.trace.steps:
         for key, value in step.detail.get("usage", {}).items():
             totals[key] += value
-    estimated = estimate_usd(settings.llm_model, totals["input_tokens"], totals["output_tokens"])
+    estimated = estimate_usd(
+        settings.primary_model, totals["input_tokens"], totals["output_tokens"]
+    )
     return tracer.finish(
         usage=totals,
-        # Priced against the configured primary model; a fallback-provider run
-        # is therefore an estimate, which is exactly how it is labeled.
+        # Priced against the configured primary provider's model; a run that
+        # fell back to the other provider is therefore an estimate, which is
+        # exactly how it is labeled.
         estimated_usd=estimated,
-        pricing_model=settings.llm_model,
+        pricing_model=settings.primary_model,
         **outputs,
     )
 

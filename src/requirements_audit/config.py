@@ -35,10 +35,12 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
 
-    llm_provider: Provider = Provider.ANTHROPIC
-    llm_fallback_provider: Provider | None = Provider.OPENAI
+    llm_provider: Provider = Provider.OPENAI
+    llm_fallback_provider: Provider | None = Provider.ANTHROPIC
 
-    # Pinned model versions (one place to bump).
+    # Pinned model versions (one place to bump). `llm_model` is the Anthropic
+    # model, `openai_model` the OpenAI one; `primary_model` resolves whichever
+    # the configured primary provider uses.
     llm_model: str = "claude-sonnet-4-6"
     openai_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
@@ -64,3 +66,8 @@ class Settings(BaseSettings):
 
     def model_for(self, provider: Provider) -> str:
         return self.llm_model if provider is Provider.ANTHROPIC else self.openai_model
+
+    @property
+    def primary_model(self) -> str:
+        """The model the configured primary provider runs — what cost estimates price."""
+        return self.model_for(self.llm_provider)

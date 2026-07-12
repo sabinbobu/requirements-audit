@@ -151,7 +151,7 @@ make ui                                 # Streamlit thin client over the API (ne
 ```
 
 `audit --no-llm` and the whole eval gate run offline; `query` and the full `audit`
-call an LLM (Anthropic primary, OpenAI fallback) and require an API key.
+call an LLM (OpenAI primary, Anthropic fallback) and require an API key.
 
 The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client over the same API) offers the same ingest / query / audit flows for non-terminal use and the demo.
 
@@ -191,7 +191,7 @@ The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client 
 - Hybrid retrieval (dense + BM25) over Qdrant; SQLite entity / reference tables
 - Four-agent pipeline (Planner → Retriever → Analyst → Critic) in PydanticAI
 - Evaluation harness with golden set, contradiction ground truth, Ragas, calibrated LLM-judge, CI gate
-- FastAPI + SSE, Docker compose, LangFuse tracing, provider fallback (Anthropic ↔ OpenAI)
+- FastAPI + SSE, Docker compose, LangFuse tracing, provider fallback (OpenAI ↔ Anthropic)
 - Streamlit UI — a thin client over the API for ingest, query, and audit
 
 **Deliberately out of scope (roadmap):**

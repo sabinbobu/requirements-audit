@@ -34,10 +34,10 @@ def test_query_trace_carries_usage_totals_and_estimate(store: SqliteStore) -> No
     # Planner + analyst both ran (the analyst makes 2 requests: tool call + answer).
     assert usage["requests"] >= 2
     assert usage["input_tokens"] > 0 and usage["output_tokens"] > 0
-    # Priced against the configured (pinned) primary model, and labeled with it.
-    assert trace.metadata["pricing_model"] == settings.llm_model
+    # Priced against the primary provider's pinned model, and labeled with it.
+    assert trace.metadata["pricing_model"] == settings.primary_model
     assert trace.metadata["estimated_usd"] == estimate_usd(
-        settings.llm_model, usage["input_tokens"], usage["output_tokens"]
+        settings.primary_model, usage["input_tokens"], usage["output_tokens"]
     )
 
 
