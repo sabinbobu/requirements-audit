@@ -9,12 +9,20 @@ and are handled by the L1 abstention assertions instead.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Protocol
 
 from pydantic import BaseModel
 
 from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.models import GoldenQuestion
-from requirements_audit.retrieval.lexical import LexicalIndex
+from requirements_audit.retrieval.lexical import LexicalIndex, ScoredChunk
+
+
+class SearchIndex(Protocol):
+    """Any ranked retriever — LexicalIndex, DenseIndex, HybridIndex — so the
+    same metric code scores every Phase E strategy."""
+
+    def search(self, query: str, k: int = 5) -> list[ScoredChunk]: ...
 
 
 def precision_at_k(expected: set[str], retrieved: Sequence[str], k: int) -> float:
@@ -39,10 +47,19 @@ class RetrievalScore(BaseModel):
 
 
 def evaluate_retrieval(
-    store: SqliteStore, questions: Sequence[GoldenQuestion], k: int
+    store: SqliteStore,
+    questions: Sequence[GoldenQuestion],
+    k: int,
+    *,
+    index: SearchIndex | None = None,
 ) -> RetrievalScore:
-    """Mean precision@k / recall@k over questions that have expected sources."""
-    index = LexicalIndex.from_store(store)
+    """Mean precision@k / recall@k over questions that have expected sources.
+
+    Defaults to the lexical index (the gated baseline); the benchmark passes
+    dense/hybrid indexes through `index` to score them with identical code.
+    """
+    if index is None:
+        index = LexicalIndex.from_store(store)
     scored = [q for q in questions if q.expected_source_ids]
     if not scored:
         return RetrievalScore(precision_at_k=0.0, recall_at_k=0.0, k=k, n_questions=0)

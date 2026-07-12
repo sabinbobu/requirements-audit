@@ -62,5 +62,5 @@ query: ## Ask a question (Q="...")
 audit: ## Sweep the corpus for contradictions
 	uv run requirements-audit audit
 
-benchmark: ## Run retrieval benchmarks (DB=data/requirements.sqlite, OUT=)
-	uv run requirements-audit benchmark --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),)
+benchmark: ## Run retrieval benchmarks (DB=..., OUT=, STRATEGIES="lexical dense hybrid", EMBEDDER=auto|hash|openai)
+	uv run requirements-audit benchmark --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),) $(foreach s,$(STRATEGIES),-s $(s)) $(if $(EMBEDDER),--embedder $(EMBEDDER),)
