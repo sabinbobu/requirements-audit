@@ -50,9 +50,7 @@ def rerank(query: str, candidates: list[ScoredChunk], k: int) -> list[ScoredChun
         candidates,
         key=lambda c: (-_coverage(query_terms, c), -c.score, c.chunk.requirement_id),
     )
-    return [
-        ScoredChunk(chunk=c.chunk, score=_coverage(query_terms, c)) for c in ranked[:k]
-    ]
+    return [ScoredChunk(chunk=c.chunk, score=_coverage(query_terms, c)) for c in ranked[:k]]
 
 
 class RerankingIndex:

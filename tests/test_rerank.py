@@ -65,7 +65,9 @@ def test_reranking_index_is_deterministic_over_corpus() -> None:
     ]
 
     def build() -> RerankingIndex:
-        return RerankingIndex(HybridIndex(LexicalIndex(chunks), DenseIndex(chunks, HashingEmbedder())))
+        return RerankingIndex(
+            HybridIndex(LexicalIndex(chunks), DenseIndex(chunks, HashingEmbedder()))
+        )
 
     first = build().search("watchdog timer expiry", k=3)
     second = build().search("watchdog timer expiry", k=3)
