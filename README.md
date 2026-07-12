@@ -2,7 +2,7 @@
 
 > A multi-agent system over engineering specification documents that answers requirement queries with citations and **detects contradictions between requirements across documents** — with a measured evaluation harness, not vibes.
 
-**Status:** Phases A–H implemented. Everything below — corpus, ingestion, four-agent pipeline, two-tier eval gate, four measured retrieval strategies, chunk-size sweep, FastAPI ops layer with SSE + per-request cost/latency, Docker, Streamlit UI — runs and is tested **without API keys**; the numbers tables mark exactly which rows still need a live (keyed) run. Remaining manual steps: the live/nightly runs, the bad-prompt CI-failure demo PR, and the Loom.
+**Status:** Phases A–H implemented. Everything below — corpus, ingestion, four-agent pipeline, two-tier eval gate, four measured retrieval strategies, chunk-size sweep, FastAPI ops layer with SSE + per-request cost/latency, Docker, editor-style web UI — runs and is tested **without API keys**; the numbers tables mark exactly which rows still need a live (keyed) run. Remaining manual steps: the live/nightly runs, the bad-prompt CI-failure demo PR, and the Loom.
 
 ---
 
@@ -36,7 +36,7 @@ docs (ARXML, MD, PDF) ──► INGESTION (parse → structure-aware chunk → e
                                     get_section,   pair reqs  sources;            + human gate
                                     find_refs)     & compare) reject FPs)
 
-                          OPS:  LangFuse traces · cost/latency per run · FastAPI + SSE · Streamlit UI · Docker
+                          OPS:  LangFuse traces · cost/latency per run · FastAPI + SSE · web UI · Docker
                           EVAL: golden set + seeded contradictions · Ragas + LLM-judge
                                 in pytest · GitHub Actions gate
 ```
@@ -61,7 +61,7 @@ flowchart LR
 
     orch -.traces · cost · latency.-> lf["LangFuse"]
     api["FastAPI + SSE"] --> orch
-    ui["Streamlit (thin client)"] --> api
+    ui["Web UI (editor-style, at /)"] --> api
     cli["CLI"] --> orch
 ```
 
@@ -147,13 +147,13 @@ requirements-audit audit                # full sweep incl. prose conflicts (need
 
 make api                                # serve the FastAPI app on :8000 (SSE /query)
 docker compose up -d                    # or: api + qdrant + langfuse in one command
-make ui                                 # Streamlit thin client over the API (needs `make api` running)
+make api                                # serves the editor-style web UI at http://localhost:8000/
 ```
 
 `audit --no-llm` and the whole eval gate run offline; `query` and the full `audit`
 call an LLM (OpenAI primary, Anthropic fallback) and require an API key.
 
-The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client over the same API) offers the same ingest / query / audit flows for non-terminal use and the demo.
+The CLI is the primary interface; the API also serves an **editor-style web UI** at `/` — corpus documents render like source files, audit findings appear as inline problems (squiggles + a VS Code-style Problems panel), and query answers cite requirements you can jump to. Self-contained static HTML/CSS/JS: no build step, no extra dependency.
 
 ## Runbook
 
@@ -167,11 +167,11 @@ The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client 
 | Benchmark retrieval strategies | `make benchmark STRATEGIES="lexical dense hybrid hybrid_rerank"` |
 | Run the chunk-size sweep | `make sweep` |
 | Serve the API | `make api` → http://localhost:8000 (OpenAPI docs at `/docs`) |
-| Launch the UI | `make ui` (API base URL via `REQUIREMENTS_AUDIT_API`) |
+| Open the web UI | `make api`, then http://localhost:8000/ (ships with the API) |
 | Start everything in Docker | `docker compose up -d` (api + qdrant + langfuse) |
 | Run what CI runs | `make check` · eval gate only: `make eval` |
 
-**Common failures:** `503` from `/query` = no LLM key configured (set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; the deterministic endpoints keep working keyless). "No chunks found" = run ingest first. Streamlit "port not available" = another app owns 8501; pass `--server.port`. CI format failures = run `make format` before committing.
+**Common failures:** `503` from `/query` = no LLM key configured (set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; the deterministic endpoints keep working keyless). "No chunks found" = run ingest first. CI format failures = run `make format` before committing.
 
 ## Limitations (read before judging the numbers)
 
@@ -192,11 +192,11 @@ The CLI is the primary interface; a lightweight **Streamlit UI** (a thin client 
 - Four-agent pipeline (Planner → Retriever → Analyst → Critic) in PydanticAI
 - Evaluation harness with golden set, contradiction ground truth, Ragas, calibrated LLM-judge, CI gate
 - FastAPI + SSE, Docker compose, LangFuse tracing, provider fallback (OpenAI ↔ Anthropic)
-- Streamlit UI — a thin client over the API for ingest, query, and audit
+- Editor-style web UI served by the API — documents as source files, findings as inline problems, query with jump-to-citation
 
 **Deliberately out of scope (roadmap):**
 - Graph store (Neo4j) — SQLite reference tables cover contradiction pairing at MVP scale
-- Heavyweight custom frontend (SPA) — the CLI is primary and a lightweight Streamlit UI covers visual use
+- Heavyweight custom frontend (SPA framework/build step) — the UI is self-contained static HTML/CSS/JS served by the API
 - n8n folder/webhook ingestion automation — paused, revisit post-MVP
 - Fine-tuning, self-hosted models, authentication, multi-tenancy
 
@@ -224,8 +224,7 @@ requirements-audit/
 │   ├── tools/           # typed retrieval tools the Analyst calls
 │   ├── llm/             # provider abstraction + fallback, pinned pricing
 │   ├── eval/            # retrieval/contradiction/judge/Ragas metrics, benchmark, sweep
-│   ├── api/             # FastAPI ops layer (SSE /query)
-│   ├── ui/              # Streamlit thin client + typed API client
+│   ├── api/             # FastAPI ops layer (SSE /query) + static/ editor web UI
 │   ├── orchestrator.py  # the two entrypoints: answer_query, run_audit
 │   └── tracing.py       # in-memory RunTrace always; LangFuse export when keyed
 ├── evals/               # golden_set.json, contradictions.json, judge_labels.json, eval gate tests

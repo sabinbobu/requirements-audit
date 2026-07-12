@@ -28,6 +28,8 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pydantic_ai.models import Model
 from sse_starlette import EventSourceResponse, ServerSentEvent
@@ -37,11 +39,14 @@ from requirements_audit.config import Settings
 from requirements_audit.ingestion.pipeline import IngestReport, ingest_corpus
 from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.llm.provider import MissingCredentialsError, build_model
-from requirements_audit.models import AuditReport, Finding
+from requirements_audit.models import AuditReport, Chunk, Finding
 from requirements_audit.orchestrator import answer_query, run_audit
 from requirements_audit.tracing import RunTrace, StepRecord, Tracer
 
 ModelFactory = Callable[[Settings], Model]
+
+# The editor-style web UI: self-contained HTML/CSS/JS, served at "/".
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 # ─── request / response bodies ────────────────────────────────────────────────
@@ -53,6 +58,19 @@ class HealthResponse(BaseModel):
 
 class IngestRequest(BaseModel):
     corpus_dir: str
+
+
+class DocumentSummary(BaseModel):
+    doc_id: str
+    chunk_count: int
+
+
+class DocumentDetail(BaseModel):
+    """A document's requirement chunks in document order — what the editor UI
+    renders as a source file."""
+
+    doc_id: str
+    chunks: list[Chunk]
 
 
 class QueryRequest(BaseModel):
@@ -136,6 +154,27 @@ def create_app(
         with _store() as store:
             return HealthResponse(status="ok", version=__version__, chunks=store.chunk_count())
 
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        """The editor-style web UI (self-contained static app)."""
+        return FileResponse(_STATIC_DIR / "index.html")
+
+    @app.get("/documents", response_model=list[DocumentSummary])
+    def documents() -> list[DocumentSummary]:
+        with _store() as store:
+            return [
+                DocumentSummary(doc_id=doc_id, chunk_count=count)
+                for doc_id, count in store.documents()
+            ]
+
+    @app.get("/documents/{doc_id}", response_model=DocumentDetail)
+    def document(doc_id: str) -> DocumentDetail:
+        with _store() as store:
+            chunks = store.chunks_for_doc(doc_id)
+        if not chunks:
+            raise HTTPException(status_code=404, detail=f"Unknown document: {doc_id}")
+        return DocumentDetail(doc_id=doc_id, chunks=chunks)
+
     @app.post("/ingest", response_model=IngestReport)
     def ingest(body: IngestRequest) -> IngestReport:
         corpus = Path(body.corpus_dir)
@@ -202,6 +241,9 @@ def create_app(
             )
 
         return EventSourceResponse(events())
+
+    # CSS/JS assets for the editor UI (index.html itself is served at "/").
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
     return app
 

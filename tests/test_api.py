@@ -87,6 +87,35 @@ def ingested_client(tmp_path: Path) -> TestClient:
     return c
 
 
+def test_index_serves_the_editor_ui(client: TestClient) -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Requirements Audit" in response.text
+    # The self-contained assets resolve through the /static mount.
+    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/style.css").status_code == 200
+
+
+def test_documents_lists_ingested_docs_in_order(ingested_client: TestClient) -> None:
+    docs = ingested_client.get("/documents").json()
+    ids = [d["doc_id"] for d in docs]
+    assert ids == sorted(ids) and len(ids) == 8
+    assert all(d["chunk_count"] > 0 for d in docs)
+
+
+def test_document_detail_returns_chunks_in_document_order(ingested_client: TestClient) -> None:
+    detail = ingested_client.get("/documents/SYS").json()
+    assert detail["doc_id"] == "SYS"
+    req_ids = [c["requirement_id"] for c in detail["chunks"]]
+    assert req_ids == sorted(req_ids) and req_ids  # zero-padded ids = doc order
+    assert all(c["doc_id"] == "SYS" for c in detail["chunks"])
+
+
+def test_document_detail_unknown_doc_is_404(ingested_client: TestClient) -> None:
+    assert ingested_client.get("/documents/NOPE").status_code == 404
+
+
 def test_healthz_reports_version_and_chunk_count(client: TestClient) -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
