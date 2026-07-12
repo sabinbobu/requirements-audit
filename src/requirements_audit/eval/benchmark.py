@@ -1,9 +1,10 @@
 """Phase E benchmark harness.
 
-Measured strategies: the deterministic BM25 baseline, the dense arm (in-process
-Qdrant + a pluggable embedder), and hybrid RRF fusion of the two. Reranking is
-still represented explicitly as `not_implemented` so benchmark output shows what
-does not exist yet instead of silently substituting a weaker variant.
+All four strategies are measured: the deterministic BM25 baseline, the dense
+arm (in-process Qdrant + a pluggable embedder), hybrid RRF fusion of the two,
+and hybrid + term-coverage rerank. `BenchmarkStatus.NOT_IMPLEMENTED` stays in
+the schema for future strategies so a report can always say "does not exist
+yet" instead of silently substituting a weaker variant.
 
 Each measured row's `note` names the embedder that produced it: the keyless CI
 run uses the deterministic hashing embedder (a wiring floor), the live/nightly
@@ -25,6 +26,7 @@ from requirements_audit.retrieval.dense import DenseIndex
 from requirements_audit.retrieval.embedding import Embedder, HashingEmbedder
 from requirements_audit.retrieval.fusion import HybridIndex
 from requirements_audit.retrieval.lexical import LexicalIndex
+from requirements_audit.retrieval.rerank import RERANKER_NAME, RerankingIndex
 
 
 class RetrievalStrategy(StrEnum):
@@ -51,13 +53,6 @@ class RetrievalBenchmarkResult(BaseModel):
 
 class BenchmarkReport(BaseModel):
     retrieval: list[RetrievalBenchmarkResult]
-
-
-_NOT_IMPLEMENTED_NOTES: dict[RetrievalStrategy, str] = {
-    RetrievalStrategy.HYBRID_RERANK: (
-        "Reranking is planned as the next increment now that hybrid fusion is measured."
-    ),
-}
 
 
 def load_golden_questions(path: Path) -> list[GoldenQuestion]:
@@ -102,29 +97,27 @@ def run_retrieval_benchmark(
             dense_index = DenseIndex(chunks, embedder)
         return dense_index, embedder
 
-    for strategy in selected:
-        if strategy is RetrievalStrategy.HYBRID_RERANK:
-            results.append(
-                RetrievalBenchmarkResult(
-                    strategy=strategy,
-                    status=BenchmarkStatus.NOT_IMPLEMENTED,
-                    k=k,
-                    n_questions=0,
-                    note=_NOT_IMPLEMENTED_NOTES[strategy],
-                )
-            )
-            continue
+    def _hybrid() -> tuple[HybridIndex, Embedder]:
+        d_index, emb = _dense()
+        return HybridIndex(_lexical(), d_index), emb
 
+    for strategy in selected:
         if strategy is RetrievalStrategy.LEXICAL:
-            index: LexicalIndex | DenseIndex | HybridIndex = _lexical()
+            index: LexicalIndex | DenseIndex | HybridIndex | RerankingIndex = _lexical()
             note = "BM25 lexical baseline over SQLite chunks."
         elif strategy is RetrievalStrategy.DENSE:
             index, emb = _dense()
             note = f"Dense cosine retrieval over in-process Qdrant; embedder={emb.name}."
-        else:  # HYBRID
-            d_index, emb = _dense()
-            index = HybridIndex(_lexical(), d_index)
+        elif strategy is RetrievalStrategy.HYBRID:
+            index, emb = _hybrid()
             note = f"RRF fusion of BM25 + dense arms; embedder={emb.name}."
+        else:  # HYBRID_RERANK
+            h_index, emb = _hybrid()
+            index = RerankingIndex(h_index)
+            note = (
+                f"Hybrid + {RERANKER_NAME} rerank (deterministic); embedder={emb.name}. "
+                "A cross-encoder/LLM reranker is the live-run upgrade path."
+            )
 
         score = evaluate_retrieval(store, questions, k, index=index)
         results.append(
