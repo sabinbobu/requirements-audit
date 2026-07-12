@@ -68,8 +68,7 @@ benchmark: ## Run retrieval benchmarks (DB=..., OUT=, STRATEGIES="lexical dense 
 sweep: ## Run the chunk-size sweep (DB=..., OUT=, SIZES="256 512 1024")
 	uv run requirements-audit chunk-sweep --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),) $(foreach s,$(SIZES),-s $(s))
 
-api: ## Serve the FastAPI app locally with auto-reload (PORT=8000)
+api: ## Serve the API + web UI locally with auto-reload (PORT=8000; UI at /)
 	uv run uvicorn requirements_audit.api.app:app --reload --port $(or $(PORT),8000)
 
-ui: ## Launch the Streamlit UI (thin client; needs the API running — `make api`)
-	uv run --group ui streamlit run src/requirements_audit/ui/app.py
+ui: api ## Alias: the editor-style web UI ships with the API at http://localhost:8000/
