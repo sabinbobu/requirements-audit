@@ -1,10 +1,10 @@
 """Provider abstraction: build the PydanticAI model from `Settings`.
 
-Anthropic is primary, OpenAI the fallback (README: "provider fallback Anthropic ↔
-OpenAI"). Only providers whose API key is present are wired, so this is called
-exclusively on live runs — tests inject `TestModel`/`FunctionModel` via
-`agent.override(...)` and never reach here. Constructing a model performs no
-network I/O; the first request does.
+OpenAI is primary, Anthropic the fallback (README: "provider fallback OpenAI ↔
+Anthropic"; order is configurable via `LLM_PROVIDER`). Only providers whose API
+key is present are wired, so this is called exclusively on live runs — tests
+inject `TestModel`/`FunctionModel` via `agent.override(...)` and never reach
+here. Constructing a model performs no network I/O; the first request does.
 """
 
 from __future__ import annotations
