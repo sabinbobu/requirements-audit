@@ -49,18 +49,21 @@ def test_retrieval_benchmark_measures_dense_and_hybrid(store: SqliteStore) -> No
         assert "hash" in result.note  # discloses the keyless embedder
 
 
-def test_retrieval_benchmark_marks_unimplemented_variants(store: SqliteStore) -> None:
+def test_retrieval_benchmark_measures_hybrid_rerank(store: SqliteStore) -> None:
     report = run_retrieval_benchmark(
         store,
         build_golden_set(),
-        strategies=[RetrievalStrategy.LEXICAL, RetrievalStrategy.HYBRID_RERANK],
+        strategies=[RetrievalStrategy.HYBRID_RERANK],
     )
 
-    rerank = report.retrieval[1]
+    rerank = report.retrieval[0]
     assert rerank.strategy is RetrievalStrategy.HYBRID_RERANK
-    assert rerank.status is BenchmarkStatus.NOT_IMPLEMENTED
-    assert rerank.precision_at_k is None
-    assert "planned" in rerank.note
+    assert rerank.status is BenchmarkStatus.MEASURED
+    assert rerank.precision_at_k is not None
+    assert rerank.recall_at_k is not None
+    # The note must disclose both the reranker and the embedder behind it.
+    assert "term-coverage" in rerank.note
+    assert "hash" in rerank.note
 
 
 def test_write_report_creates_json(tmp_path, store: SqliteStore) -> None:  # type: ignore[no-untyped-def]

@@ -193,9 +193,7 @@ def benchmark(
 
     # Only resolve an embedder when a selected strategy actually needs one, so
     # the default lexical run never consults keys or builds a vector index.
-    needs_embedder = any(
-        s in (RetrievalStrategy.DENSE, RetrievalStrategy.HYBRID) for s in (selected or [])
-    )
+    needs_embedder = any(s is not RetrievalStrategy.LEXICAL for s in (selected or []))
     resolved_embedder = None
     if needs_embedder:
         try:
