@@ -65,14 +65,24 @@ class AuditRequest(BaseModel):
 
 
 class TraceSummary(BaseModel):
-    """The per-request observability payload: stage latencies + totals."""
+    """The per-request observability payload: stage latencies, token totals,
+    and the estimated cost (None on deterministic runs / unpriced models)."""
 
     steps: list[StepRecord]
     total_latency_ms: float
+    usage: dict[str, int] | None = None
+    estimated_usd: float | None = None
+    pricing_model: str | None = None
 
     @classmethod
     def from_trace(cls, trace: RunTrace) -> TraceSummary:
-        return cls(steps=trace.steps, total_latency_ms=trace.total_latency_ms)
+        return cls(
+            steps=trace.steps,
+            total_latency_ms=trace.total_latency_ms,
+            usage=trace.metadata.get("usage"),
+            estimated_usd=trace.metadata.get("estimated_usd"),
+            pricing_model=trace.metadata.get("pricing_model"),
+        )
 
 
 class AuditResponse(BaseModel):

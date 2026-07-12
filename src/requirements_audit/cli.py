@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
 from requirements_audit import __version__
+
+if TYPE_CHECKING:
+    from requirements_audit.tracing import RunTrace
 
 app = typer.Typer(
     name="requirements-audit",
@@ -15,6 +19,22 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+def _run_stats(trace: "RunTrace") -> str:  # noqa: UP037 - runtime import stays lazy
+    """One ops line per run: latency, tokens, and the estimated cost.
+
+    Written to stderr so piping stdout (the answer / findings) stays clean.
+    """
+    usage = trace.metadata.get("usage") or {}
+    tokens = f"{usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out"
+    estimated = trace.metadata.get("estimated_usd")
+    cost = (
+        f"~${estimated:.4f} (est., {trace.metadata.get('pricing_model')})"
+        if estimated is not None and usage.get("requests", 0) > 0
+        else "$0 (no LLM calls)"
+    )
+    return f"[{trace.total_latency_ms:.0f} ms · {tokens} tokens · {cost}]"
 
 
 def _version_callback(value: bool) -> None:
@@ -81,7 +101,7 @@ def query(
         raise typer.Exit(1) from exc
 
     with SqliteStore(db) as store:
-        answer, _trace = answer_query(store, question, settings, model=model)
+        answer, trace = answer_query(store, question, settings, model=model)
 
     typer.echo(answer.text)
     if answer.citations:
@@ -90,6 +110,7 @@ def query(
             typer.echo(f"  [{c.doc_id} · {c.requirement_id}] {c.quote}")
     else:
         typer.secho("\n(no supporting sources in the corpus)", fg=typer.colors.YELLOW)
+    typer.secho(_run_stats(trace), fg=typer.colors.BLUE, err=True)
 
 
 @app.command()
@@ -130,7 +151,7 @@ def audit(
             )
 
     with SqliteStore(db) as store:
-        report, _trace = run_audit(store, settings, model=model, use_llm=use_llm)
+        report, trace = run_audit(store, settings, model=model, use_llm=use_llm)
 
     if not report.findings:
         typer.echo("No contradictions found.")
@@ -147,6 +168,7 @@ def audit(
         f"\n{len(report.findings)} finding(s) from {report.candidates_considered} candidate(s); "
         f"{report.rejected_by_critic} rejected by the Critic."
     )
+    typer.secho(_run_stats(trace), fg=typer.colors.BLUE, err=True)
 
 
 @app.command()
