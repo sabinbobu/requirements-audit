@@ -2,7 +2,7 @@
 
 > A multi-agent system over engineering specification documents that answers requirement queries with citations and **detects contradictions between requirements across documents** — with a measured evaluation harness, not vibes.
 
-**Status:** Phases A–D complete; Phase E (benchmark & tune) in progress. `ingest`, `query`, `audit`, and `benchmark` run from the CLI; the four-agent pipeline (Planner → Retriever → Analyst → Critic) is wired with LangFuse-style tracing, and the two-tier eval gate (keyless CI + nightly live) is in place. Retrieval now has three measured strategies — BM25, dense (in-process Qdrant + pluggable embedder), and hybrid RRF fusion; reranking, the chunk-size sweep, and cost/latency numbers are next. API/UI: Phases F–G.
+**Status:** Phases A–D complete; Phase E measured keyless (four retrieval strategies + chunk-size sweep; live-embedding and provider cost/latency runs pending); Phase F ops layer in place. The FastAPI app serves `/healthz`, `/ingest`, `/audit`, and `/query` (SSE: live pipeline-stage events, then the answer + per-stage latencies), and `docker compose up` starts api + qdrant + langfuse. Keyless requests get the deterministic audit; `/query` needs an LLM key. Streamlit UI: Phase G.
 
 ---
 
@@ -95,6 +95,8 @@ requirements-audit audit --no-llm       # deterministic sweep: numeric + superse
 requirements-audit query "What is the watchdog timeout?"   # Q&A with citations (needs a key)
 requirements-audit audit                # full sweep incl. prose conflicts (needs a key)
 
+make api                                # serve the FastAPI app on :8000 (SSE /query)
+docker compose up -d                    # or: api + qdrant + langfuse in one command
 make ui                                 # optional: launch the Streamlit UI (Phase G)
 ```
 

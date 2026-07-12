@@ -1,6 +1,6 @@
 # Canonical commands. Run `make help` to list them.
 .DEFAULT_GOAL := help
-.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark sweep
+.PHONY: help install lock sync hooks lint format typecheck test test-fast eval check up down logs clean corpus ingest query audit benchmark sweep api
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -67,3 +67,6 @@ benchmark: ## Run retrieval benchmarks (DB=..., OUT=, STRATEGIES="lexical dense 
 
 sweep: ## Run the chunk-size sweep (DB=..., OUT=, SIZES="256 512 1024")
 	uv run requirements-audit chunk-sweep --db $(or $(DB),data/requirements.sqlite) $(if $(OUT),--output $(OUT),) $(foreach s,$(SIZES),-s $(s))
+
+api: ## Serve the FastAPI app locally with auto-reload (PORT=8000)
+	uv run uvicorn requirements_audit.api.app:app --reload --port $(or $(PORT),8000)

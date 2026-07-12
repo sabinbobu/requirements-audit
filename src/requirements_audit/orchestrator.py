@@ -63,9 +63,13 @@ def answer_query(
     settings: Settings,
     *,
     model: Model | None = None,
+    tracer: Tracer | None = None,
 ) -> tuple[Answer, RunTrace]:
+    """`tracer` is injectable so callers can observe stages live (the API streams
+    them over SSE); when omitted a plain in-memory tracer is used."""
     deps = RetrievalDeps.from_store(store)
-    tracer = Tracer("query", settings, question=question)
+    if tracer is None:
+        tracer = Tracer("query", settings, question=question)
     limits = usage_limits(settings)
 
     with tracer.step("plan") as detail:
