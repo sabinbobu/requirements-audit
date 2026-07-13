@@ -64,6 +64,7 @@ button:disabled { opacity: 0.5; cursor: wait; }
   text-transform: uppercase; color: var(--text-dim);
 }
 .pane-title button { padding: 1px 7px; font-size: 12px; }
+.pane-actions { display: flex; gap: 4px; }
 #file-list { list-style: none; }
 #file-list li {
   display: flex; justify-content: space-between; align-items: center;

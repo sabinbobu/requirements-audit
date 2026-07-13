@@ -168,6 +168,7 @@ The CLI is the primary interface; the API also serves an **editor-style web UI**
 | Run the chunk-size sweep | `make sweep` |
 | Serve the API | `make api` → http://localhost:8000 (OpenAPI docs at `/docs`) |
 | Open the web UI | `make api`, then http://localhost:8000/ (ships with the API) |
+| Add your own spec | UI explorer ⬆ button, or `POST /upload` a `.md`/`.pdf` (saved to `data/uploads/`, ingested server-side) |
 | Start everything in Docker | `docker compose up -d` (api + qdrant + langfuse) |
 | Run what CI runs | `make check` · eval gate only: `make eval` |
 

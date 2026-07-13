@@ -401,9 +401,32 @@ async function ingest() {
   }
 }
 
+async function uploadFile(file) {
+  status(`uploading ${file.name}…`);
+  const body = new FormData();
+  body.append("file", file);
+  try {
+    const r = await api("/upload", { method: "POST", body }); // no content-type: browser sets the multipart boundary
+    const added = [...r.new_docs, ...r.updated_docs];
+    status(added.length
+      ? `uploaded ${file.name}: ${added.join(", ")} (${r.chunks} chunks total)`
+      : `uploaded ${file.name}: already ingested, unchanged`);
+    await Promise.all([loadHealth(), loadDocs()]);
+  } catch (e) {
+    // 400 = wrong type, 413 = too big, 422 = unparseable — the detail explains which.
+    status(`upload failed: ${e.message}`);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   $("#audit-btn").onclick = runAudit;
   $("#ingest-btn").onclick = ingest;
+  $("#upload-btn").onclick = () => $("#upload-input").click();
+  $("#upload-input").onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) uploadFile(file);
+    e.target.value = ""; // allow re-uploading the same filename
+  };
   document.querySelectorAll("#panel-tabs button").forEach(
     (b) => (b.onclick = () => switchPanel(b.dataset.tab))
   );

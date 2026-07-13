@@ -54,6 +54,8 @@ class Settings(BaseSettings):
 
     # ─── Local stores ───────────────────────────────────────────────────────────
     sqlite_path: Path = Path("data/requirements.sqlite")
+    # Where the API saves documents uploaded through the UI before ingesting them.
+    uploads_dir: Path = Path("data/uploads")
 
     # ─── LangFuse (tracing; absent keys => tracing is a no-op) ───────────────────
     langfuse_host: str | None = None

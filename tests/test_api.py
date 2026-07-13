@@ -24,6 +24,7 @@ def _settings(tmp_path: Path) -> Settings:
         anthropic_api_key=None,
         openai_api_key=None,
         sqlite_path=tmp_path / "api-test.sqlite",
+        uploads_dir=tmp_path / "uploads",
     )
 
 
@@ -112,6 +113,41 @@ def test_document_detail_returns_chunks_in_document_order(ingested_client: TestC
 
 def test_document_detail_unknown_doc_is_404(ingested_client: TestClient) -> None:
     assert ingested_client.get("/documents/NOPE").status_code == 404
+
+
+# ─── /upload ──────────────────────────────────────────────────────────────────
+_UPLOAD_MD = (
+    "# Brake Control\n\nDocument ID: BRAKE\nType: component\n\n## Timing\n\n"
+    "### BRAKE-REQ-0101 — Actuation latency\n\n"
+    "The brake actuator shall engage within 50 ms.\n\n"
+    "- Status: active\n- Parameters: brake_latency_ms = 50\n"
+)
+
+
+def test_upload_markdown_ingests_and_appears_in_documents(client: TestClient) -> None:
+    resp = client.post("/upload", files={"file": ("BRAKE.md", _UPLOAD_MD, "text/markdown")})
+    assert resp.status_code == 200, resp.text
+    report = resp.json()
+    assert "BRAKE" in report["new_docs"] and report["chunks"] > 0
+
+    ids = [d["doc_id"] for d in client.get("/documents").json()]
+    assert "BRAKE" in ids
+
+
+def test_upload_rejects_unsupported_extension(client: TestClient) -> None:
+    resp = client.post("/upload", files={"file": ("notes.txt", "hello", "text/plain")})
+    assert resp.status_code == 400
+
+
+def test_upload_unparseable_is_422_and_not_persisted(client: TestClient) -> None:
+    # Valid extension, but no requirement IDs → parser raises → 422, file removed.
+    resp = client.post("/upload", files={"file": ("junk.md", "just some prose", "text/markdown")})
+    assert resp.status_code == 422
+    # A subsequent listing must not show a phantom doc, and re-uploading a good
+    # file must still work (the bad file did not wedge the uploads dir).
+    assert client.get("/documents").json() == []
+    good = client.post("/upload", files={"file": ("BRAKE.md", _UPLOAD_MD, "text/markdown")})
+    assert good.status_code == 200
 
 
 def test_healthz_reports_version_and_chunk_count(client: TestClient) -> None:
