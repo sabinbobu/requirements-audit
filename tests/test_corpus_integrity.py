@@ -170,3 +170,14 @@ def test_committed_ground_truth_matches_generator(
     on_disk_q = json.loads((_ROOT / "evals" / "golden_set.json").read_text(encoding="utf-8"))
     assert on_disk_c == [c.model_dump(mode="json") for c in contradictions]
     assert on_disk_q == [q.model_dump(mode="json") for q in questions]
+
+
+def test_committed_corpus_files_match_generator() -> None:
+    """Guards the generator-owned corpus files against silent edits — checked
+    by filename, so user-added documents in corpus/ are deliberately ignored
+    (dropping your own specs into corpus/ is the supported workflow)."""
+    for doc in generator.build_documents():
+        on_disk = (_ROOT / "corpus" / f"{doc.id}.md").read_text(encoding="utf-8")
+        assert on_disk == generator.render_markdown(doc), (
+            f"corpus/{doc.id}.md drifted from the generator — run `make corpus`"
+        )

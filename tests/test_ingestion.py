@@ -21,9 +21,6 @@ from requirements_audit.ingestion.pipeline import ingest_corpus
 from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.models import EntityType, Requirement, RequirementDocument
 
-_ROOT = Path(__file__).resolve().parents[1]
-_CORPUS = _ROOT / "corpus"
-
 # Fields the Markdown format actually carries (category is not rendered).
 _RECOVERABLE = (
     "id",
@@ -38,9 +35,9 @@ _RECOVERABLE = (
 )
 
 
-@pytest.fixture(scope="module")
-def parsed_docs() -> list[RequirementDocument]:
-    return parse_corpus(_CORPUS)
+@pytest.fixture
+def parsed_docs(generated_corpus: Path) -> list[RequirementDocument]:
+    return parse_corpus(generated_corpus)
 
 
 # ─── parser fidelity ─────────────────────────────────────────────────────────
@@ -120,23 +117,25 @@ def test_dangling_reference_is_flagged() -> None:
 
 
 # ─── store + pipeline idempotency ─────────────────────────────────────────────
-def test_ingest_is_idempotent(tmp_path: Path) -> None:
+def test_ingest_is_idempotent(tmp_path: Path, generated_corpus: Path) -> None:
     db = tmp_path / "store.sqlite"
     with SqliteStore(db) as store:
-        first = ingest_corpus(_CORPUS, store)
+        first = ingest_corpus(generated_corpus, store)
         assert first.new_docs and not first.updated_docs and not first.unchanged_docs
         chunks_after_first = first.chunks
 
-        second = ingest_corpus(_CORPUS, store)
+        second = ingest_corpus(generated_corpus, store)
         assert not second.new_docs and not second.updated_docs
         assert len(second.unchanged_docs) == len(first.new_docs)
         assert second.chunks == chunks_after_first  # nothing re-written or duplicated
 
 
-def test_ingest_totals_match_corpus(tmp_path: Path, parsed_docs: list[RequirementDocument]) -> None:
+def test_ingest_totals_match_corpus(
+    tmp_path: Path, generated_corpus: Path, parsed_docs: list[RequirementDocument]
+) -> None:
     expected_chunks = sum(len(d.requirements) for d in parsed_docs)
     with SqliteStore(tmp_path / "s.sqlite") as store:
-        report = ingest_corpus(_CORPUS, store)
+        report = ingest_corpus(generated_corpus, store)
         assert report.chunks == expected_chunks
         assert report.unresolved_refs == 0
         # every stored chunk round-trips with non-empty text
@@ -167,9 +166,11 @@ def test_updated_document_is_reprocessed(tmp_path: Path) -> None:
 
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
-def test_cli_ingest_runs(tmp_path: Path) -> None:
+def test_cli_ingest_runs(tmp_path: Path, generated_corpus: Path) -> None:
     runner = CliRunner()
-    result = runner.invoke(app, ["ingest", str(_CORPUS), "--db", str(tmp_path / "cli.sqlite")])
+    result = runner.invoke(
+        app, ["ingest", str(generated_corpus), "--db", str(tmp_path / "cli.sqlite")]
+    )
     assert result.exit_code == 0, result.output
     assert "new" in result.output
     assert "chunks" in result.output

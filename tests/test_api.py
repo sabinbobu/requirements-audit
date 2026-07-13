@@ -16,9 +16,6 @@ from requirements_audit.api.app import create_app
 from requirements_audit.config import Settings
 from requirements_audit.llm.provider import MissingCredentialsError
 
-_ROOT = Path(__file__).resolve().parents[1]
-_CORPUS = _ROOT / "corpus"
-
 
 def _settings(tmp_path: Path) -> Settings:
     # Explicit ctor args outrank env/.env in pydantic-settings, so these tests
@@ -80,10 +77,11 @@ def client(tmp_path: Path) -> TestClient:
 
 
 @pytest.fixture
-def ingested_client(tmp_path: Path) -> TestClient:
-    """Keyless app with the corpus ingested through the API itself."""
+def ingested_client(tmp_path: Path, generated_corpus: Path) -> TestClient:
+    """Keyless app with the generated corpus ingested through the API itself
+    (hermetic: user documents in the repo's corpus/ never affect these tests)."""
     c = TestClient(create_app(_settings(tmp_path), model_factory=_no_model))
-    assert c.post("/ingest", json={"corpus_dir": str(_CORPUS)}).status_code == 200
+    assert c.post("/ingest", json={"corpus_dir": str(generated_corpus)}).status_code == 200
     return c
 
 
@@ -124,12 +122,14 @@ def test_healthz_reports_version_and_chunk_count(client: TestClient) -> None:
     assert body["chunks"] == 0  # nothing ingested yet
 
 
-def test_ingest_returns_report_and_is_idempotent(client: TestClient) -> None:
-    first = client.post("/ingest", json={"corpus_dir": str(_CORPUS)}).json()
+def test_ingest_returns_report_and_is_idempotent(
+    client: TestClient, generated_corpus: Path
+) -> None:
+    first = client.post("/ingest", json={"corpus_dir": str(generated_corpus)}).json()
     assert first["chunks"] > 0
     assert first["new_docs"] and not first["unchanged_docs"]
 
-    again = client.post("/ingest", json={"corpus_dir": str(_CORPUS)}).json()
+    again = client.post("/ingest", json={"corpus_dir": str(generated_corpus)}).json()
     assert not again["new_docs"] and again["unchanged_docs"]  # ledger hit: no re-work
 
 
@@ -157,9 +157,9 @@ def test_query_without_keys_is_503(ingested_client: TestClient) -> None:
     assert response.status_code == 503
 
 
-def test_query_streams_stages_then_answer_and_trace(tmp_path: Path) -> None:
+def test_query_streams_stages_then_answer_and_trace(tmp_path: Path, generated_corpus: Path) -> None:
     client = TestClient(create_app(_settings(tmp_path), model_factory=_qa_model))
-    assert client.post("/ingest", json={"corpus_dir": str(_CORPUS)}).status_code == 200
+    assert client.post("/ingest", json={"corpus_dir": str(generated_corpus)}).status_code == 200
 
     with client.stream(
         "POST", "/query", json={"question": "What is the watchdog timeout?"}

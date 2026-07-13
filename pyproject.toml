@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "typer>=0.12",
     "pyyaml>=6.0",
+    "pypdf>=5.0",  # text-based PDF ingestion
 ]
 
 [project.scripts]
@@ -34,6 +35,7 @@ dev = [
     "mypy>=1.11",
     "pre-commit>=3.8",
     "types-pyyaml>=6.0",
+    "fpdf2>=2.8",  # renders PDF fixtures for the PDF-ingestion tests
 ]
 # Evaluation stack is heavier (pulls a large transitive tree); kept separate so
 # the core dev loop stays fast. Install with: uv sync --group eval

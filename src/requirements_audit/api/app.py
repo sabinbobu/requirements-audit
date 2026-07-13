@@ -63,6 +63,7 @@ class IngestRequest(BaseModel):
 class DocumentSummary(BaseModel):
     doc_id: str
     chunk_count: int
+    source: str  # source filename (e.g. "SYS.md", "BRAKE.pdf") for the explorer
 
 
 class DocumentDetail(BaseModel):
@@ -163,8 +164,8 @@ def create_app(
     def documents() -> list[DocumentSummary]:
         with _store() as store:
             return [
-                DocumentSummary(doc_id=doc_id, chunk_count=count)
-                for doc_id, count in store.documents()
+                DocumentSummary(doc_id=doc_id, chunk_count=count, source=Path(source).name)
+                for doc_id, count, source in store.documents()
             ]
 
     @app.get("/documents/{doc_id}", response_model=DocumentDetail)

@@ -177,7 +177,7 @@ The CLI is the primary interface; the API also serves an **editor-style web UI**
 
 - **The corpus is synthetic and the ground truth is construction-derived.** That's the point — precision/recall are measurable by construction — but it means the numbers characterize the *harness*, not performance on messy real-world specs. The judge calibration labels share this provenance (disclosed above).
 - **Keyless dense/hybrid numbers use a hashing embedder,** which is a lexical proxy: they demonstrate the wiring and a floor, not semantic retrieval. Every benchmark row names its embedder so the two can never be conflated.
-- **Ingestion currently consumes Markdown only.** The ARXML/PDF parser surface from the architecture is not wired into the pipeline glob; the synthetic corpus is Markdown.
+- **Ingestion consumes Markdown and text-based PDF.** Both the generated corpus style (`### ID — Title` + metadata bullets) and real-world specs (inline-bold `**HL-FUN-001**` IDs, numbered sections) parse. PDF quality depends on the exporter: text PDFs from Word/LaTeX/pandoc work well; scanned/image PDFs (OCR territory) and heavy multi-column layouts do not, and marker-stripped exports can surface referenced-document IDs as spurious requirements. ARXML is still unimplemented.
 - **Requirement-atomic chunking** is validated on this corpus (see the sweep's negative result) but unvalidated on documents with long free-text requirements.
 - **Single-tenant, no auth, SQLite single-writer.** The API is a local/demo ops layer, not a hardened service.
 - **Human review decisions (accept/dismiss) are session-only** in the UI; they are not persisted through the API.
@@ -187,7 +187,7 @@ The CLI is the primary interface; the API also serves an **editor-style web UI**
 ## Scope
 
 **In scope for the MVP:**
-- Multi-format ingestion (ARXML, Markdown, PDF) with structure-aware chunking
+- Multi-format ingestion (Markdown + text-based PDF; ARXML roadmap) with structure-aware chunking
 - Hybrid retrieval (dense + BM25) over Qdrant; SQLite entity / reference tables
 - Four-agent pipeline (Planner → Retriever → Analyst → Critic) in PydanticAI
 - Evaluation harness with golden set, contradiction ground truth, Ragas, calibrated LLM-judge, CI gate
@@ -210,7 +210,7 @@ Ordered by what the measurements say matters next:
 4. **Cross-encoder / LLM reranker** behind the same benchmark row that currently measures the term-coverage reranker.
 5. **Dense vectors at ingest time** against the served Qdrant (the benchmark embeds on the fly today).
 6. **Token-level SSE streaming** on `/query` (stages stream today).
-7. Wire ARXML/PDF parsing into the ingestion glob; n8n ingestion automation (paused); Neo4j when multi-hop traceability justifies it; auth + multi-tenancy.
+7. Wire ARXML parsing into the ingestion glob (Markdown + PDF already supported); n8n ingestion automation (paused); Neo4j when multi-hop traceability justifies it; auth + multi-tenancy.
 
 ## Repository layout
 
