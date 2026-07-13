@@ -81,6 +81,8 @@ langfuse_postgres/
 *.sqlite
 *.sqlite3
 *.db
+# User documents uploaded through the UI — never commit them.
+data/uploads/
 
 # ─── Logs & traces ────────────────────────────────────────────────────────
 *.log

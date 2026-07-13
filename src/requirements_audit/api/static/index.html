@@ -29,7 +29,11 @@
       <aside id="explorer">
         <div class="pane-title">
           <span>corpus</span>
-          <button id="ingest-btn" title="Re-ingest corpus/ (idempotent)">↻</button>
+          <span class="pane-actions">
+            <input id="upload-input" type="file" accept=".md,.pdf" hidden />
+            <button id="upload-btn" title="Upload a .md or .pdf requirement spec">⬆</button>
+            <button id="ingest-btn" title="Re-ingest corpus/ (idempotent)">↻</button>
+          </span>
         </div>
         <ul id="file-list" role="listbox" aria-label="Corpus documents"></ul>
       </aside>

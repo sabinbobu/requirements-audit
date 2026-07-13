@@ -26,8 +26,9 @@ import queue
 import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -36,6 +37,7 @@ from sse_starlette import EventSourceResponse, ServerSentEvent
 
 from requirements_audit import __version__
 from requirements_audit.config import Settings
+from requirements_audit.ingestion.parser import parse_file
 from requirements_audit.ingestion.pipeline import IngestReport, ingest_corpus
 from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.llm.provider import MissingCredentialsError, build_model
@@ -47,6 +49,10 @@ ModelFactory = Callable[[Settings], Model]
 
 # The editor-style web UI: self-contained HTML/CSS/JS, served at "/".
 _STATIC_DIR = Path(__file__).parent / "static"
+
+# Ingestible upload formats and a size cap (generous for a spec, bounds abuse).
+_UPLOAD_SUFFIXES = {".md", ".pdf"}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 # ─── request / response bodies ────────────────────────────────────────────────
@@ -183,6 +189,39 @@ def create_app(
             raise HTTPException(status_code=400, detail=f"Corpus directory not found: {corpus}")
         with _store() as store:
             return ingest_corpus(corpus, store)
+
+    @app.post("/upload", response_model=IngestReport)
+    async def upload(file: Annotated[UploadFile, File()]) -> IngestReport:
+        """Accept a .md/.pdf spec, save it to the uploads dir, and ingest it.
+
+        Reuses the idempotent `ingest_corpus` over the uploads dir. A file that
+        cannot be parsed (scanned PDF, no requirement IDs) is deleted and the
+        parser's reason is returned, so a bad upload never wedges future ingests.
+        """
+        name = Path(file.filename or "").name  # strip any path components
+        if not name or Path(name).suffix.lower() not in _UPLOAD_SUFFIXES:
+            raise HTTPException(status_code=400, detail="Only .md and .pdf files are supported.")
+        data = await file.read()
+        if len(data) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File exceeds the 10 MB limit.")
+
+        settings_.uploads_dir.mkdir(parents=True, exist_ok=True)
+        target = settings_.uploads_dir / name
+        target.write_bytes(data)
+        try:
+            # Validate the new file up front: PDFs raise on failure, and a
+            # Markdown file with no requirement IDs parses to zero requirements
+            # (would otherwise ingest a phantom empty document).
+            doc = parse_file(target)
+            if not doc.requirements:
+                raise ValueError(
+                    f"{name}: no requirements found — expected `XXX-REQ-0000` style identifiers."
+                )
+            with _store() as store:
+                return ingest_corpus(settings_.uploads_dir, store)
+        except ValueError as exc:  # PdfParseError and the empty-doc guard above
+            target.unlink(missing_ok=True)  # don't let a bad file wedge re-ingest
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/audit", response_model=AuditResponse)
     def audit(body: AuditRequest) -> AuditResponse:
