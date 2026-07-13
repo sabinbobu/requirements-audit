@@ -188,6 +188,78 @@ def test_audit_explicit_llm_without_keys_is_503(ingested_client: TestClient) -> 
     assert response.status_code == 503
 
 
+def test_audit_scoped_to_doc_only_returns_touching_findings(
+    ingested_client: TestClient,
+) -> None:
+    response = ingested_client.post("/audit", json={"doc_id": "SYS"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["doc_id"] == "SYS"
+    assert body["findings"]  # SYS participates in a known deterministic conflict
+    for f in body["findings"]:
+        c = f["candidate"]
+        assert c["req_a"].startswith("SYS-") or c["req_b"].startswith("SYS-")
+
+
+def test_audit_unknown_doc_is_404(ingested_client: TestClient) -> None:
+    response = ingested_client.post("/audit", json={"doc_id": "NOPE"})
+    assert response.status_code == 404
+
+
+# ─── /audit/stream ──────────────────────────────────────────────────────────
+def _parse_sse(raw: str) -> list[tuple[str, str]]:
+    """Parse a raw SSE response body into (event, data) pairs."""
+    events: list[tuple[str, str]] = []
+    current_event = ""
+    for line in raw.splitlines():
+        if line.startswith("event:"):
+            current_event = line.removeprefix("event:").strip()
+        elif line.startswith("data:"):
+            events.append((current_event, line.removeprefix("data:").strip()))
+    return events
+
+
+def test_audit_stream_keyless_emits_stages_and_report(ingested_client: TestClient) -> None:
+    with ingested_client.stream("POST", "/audit/stream", json={}) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        raw = "".join(response.iter_text())
+
+    events = _parse_sse(raw)
+    names = [name for name, _ in events]
+    assert names[-1] == "report"
+    assert "stage" in names
+    # Keyless (deterministic-only): no comparator loop, so no progress events.
+    assert "progress" not in names
+
+    report = json.loads(dict(events)["report"])
+    assert report["llm_used"] is False
+    assert report["findings"]
+    assert report["doc_id"] is None
+
+
+def test_audit_stream_scoped_to_doc_only_returns_touching_findings(
+    ingested_client: TestClient,
+) -> None:
+    with ingested_client.stream("POST", "/audit/stream", json={"doc_id": "SYS"}) as response:
+        assert response.status_code == 200
+        raw = "".join(response.iter_text())
+
+    report = json.loads(dict(_parse_sse(raw))["report"])
+    assert report["doc_id"] == "SYS"
+    assert report["findings"]
+    for f in report["findings"]:
+        c = f["candidate"]
+        assert c["req_a"].startswith("SYS-") or c["req_b"].startswith("SYS-")
+
+
+def test_audit_stream_unknown_doc_is_404(ingested_client: TestClient) -> None:
+    # Validated synchronously before the SSE response starts, so this is a
+    # normal blocking request/response, not a stream.
+    response = ingested_client.post("/audit/stream", json={"doc_id": "NOPE"})
+    assert response.status_code == 404
+
+
 def test_query_without_keys_is_503(ingested_client: TestClient) -> None:
     response = ingested_client.post("/query", json={"question": "What is the watchdog timeout?"})
     assert response.status_code == 503

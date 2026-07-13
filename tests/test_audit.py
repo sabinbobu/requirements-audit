@@ -17,10 +17,11 @@ from requirements_audit.agents.audit import (
     detect_numeric_mismatches,
     detect_superseded_references,
     deterministic_candidates,
+    filter_candidates_by_doc,
     incompatible_candidate_pairs,
 )
 from requirements_audit.ingestion.store import SqliteStore
-from requirements_audit.models import ConflictType, Contradiction
+from requirements_audit.models import CandidateContradiction, ConflictType, Contradiction
 
 
 def _pairs(candidates: object) -> set[frozenset[str]]:
@@ -98,3 +99,43 @@ def test_incompatible_pairs_surface_prose_conflicts(
     prose_only = {p for p in incompatible_true if tuple(sorted(p)) not in exclude}
     missing = prose_only - surfaced
     assert not missing, f"comparator did not surface prose conflicts {missing}"
+
+
+# ─── document-scoped audit (single-document dashboard audit) ─────────────────
+def _cand(req_a: str, req_b: str) -> CandidateContradiction:
+    return CandidateContradiction(
+        req_a=req_a,
+        req_b=req_b,
+        conflict_type=ConflictType.NUMERIC_MISMATCH,
+        evidence_quote_a="x",
+        evidence_quote_b="y",
+        source="test",
+    )
+
+
+def test_filter_candidates_by_doc_keeps_only_touching_pairs() -> None:
+    candidates = [
+        _cand("SYS-REQ-0001", "SWC-REQ-0002"),
+        _cand("COM-REQ-0001", "DIAG-REQ-0002"),
+    ]
+    kept = filter_candidates_by_doc(candidates, {"SYS-REQ-0001"})
+    assert kept == [candidates[0]]
+
+
+def test_filter_candidates_by_doc_empty_focus_drops_everything() -> None:
+    candidates = [_cand("SYS-REQ-0001", "SWC-REQ-0002")]
+    assert filter_candidates_by_doc(candidates, set()) == []
+
+
+def test_incompatible_pairs_can_be_scoped_to_a_document(store: SqliteStore) -> None:
+    exclude: set[tuple[str, str]] = {
+        (c.req_a, c.req_b) if c.req_a <= c.req_b else (c.req_b, c.req_a)
+        for c in deterministic_candidates(store)
+    }
+    unscoped = incompatible_candidate_pairs(store, max_pairs=60, exclude=exclude)
+    scoped = incompatible_candidate_pairs(store, max_pairs=60, exclude=exclude, focus_doc="SYS")
+
+    assert scoped  # SYS participates in the comparator candidate pool
+    assert len(scoped) <= len(unscoped)
+    for p in scoped:
+        assert p.req_a.startswith("SYS-") or p.req_b.startswith("SYS-")

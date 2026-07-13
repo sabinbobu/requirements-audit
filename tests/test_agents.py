@@ -233,6 +233,37 @@ def test_deterministic_audit_needs_no_model(
     assert all(f.verdict.confidence == 1.0 for f in report.findings)
 
 
+# ─── document-scoped audit (dashboard: audit one document at a time) ─────────
+def test_run_audit_focus_doc_scopes_deterministic_findings(store: SqliteStore) -> None:
+    settings = Settings()
+    report, _trace = run_audit(store, settings, model=None, use_llm=False, focus_doc="SYS")
+    assert report.findings  # SYS participates in a known deterministic conflict
+    for f in report.findings:
+        c = f.candidate
+        assert c.req_a.startswith("SYS-") or c.req_b.startswith("SYS-")
+
+
+def test_run_audit_progress_cb_reports_sequential_comparator_progress(
+    store: SqliteStore,
+) -> None:
+    def never_conflicts(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return _final(info, {"conflicts": False})
+
+    calls: list[tuple[int, int]] = []
+    run_audit(
+        store,
+        Settings(),
+        model=FunctionModel(never_conflicts),
+        use_llm=True,
+        progress_cb=lambda done, total: calls.append((done, total)),
+    )
+    assert calls, "expected progress_cb to fire during the comparator loop"
+    total = calls[-1][1]
+    assert total > 0
+    assert [c[0] for c in calls] == list(range(1, total + 1))  # 1..N, in order
+    assert all(c[1] == total for c in calls)  # total is stable across the run
+
+
 def test_usage_limits_from_settings() -> None:
     limits = usage_limits(Settings(max_agent_steps=7, max_tokens_per_run=1234))
     assert limits.request_limit == 7

@@ -47,9 +47,76 @@ button {
 button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-faint); }
 button:disabled { opacity: 0.5; cursor: wait; }
 #audit-btn { color: var(--ok); white-space: nowrap; }
+.icon-btn { padding: 5px 9px; font-size: 14px; line-height: 1; }
 .health { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 .health.ok::before { content: "●"; color: var(--ok); margin-right: 5px; }
 .health.bad::before { content: "●"; color: var(--error); margin-right: 5px; }
+
+/* ─── dashboard (landing screen) ─────────────────────────────────────────── */
+#dashboard { flex: 1; overflow-y: auto; display: flex; justify-content: center; }
+.dashboard-inner { width: 100%; max-width: 640px; padding: 48px 24px; }
+.dashboard-inner h1 { font-size: 22px; font-weight: 600; text-align: center; }
+.dashboard-sub {
+  text-align: center; color: var(--text-dim); font-size: 13px;
+  margin: 8px 0 28px; line-height: 1.6;
+}
+.dashboard-toolbar { display: flex; justify-content: center; gap: 8px; margin-bottom: 18px; }
+#dashboard-doc-list { list-style: none; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.doc-card {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); cursor: pointer; background: var(--bg-panel);
+}
+.doc-card:last-child { border-bottom: none; }
+.doc-card:hover { background: var(--bg-hover); }
+.doc-card.selected { background: var(--bg-active); box-shadow: inset 3px 0 0 var(--accent); }
+.doc-badge {
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 4px; background: var(--bg-active); color: var(--text-dim);
+  flex-shrink: 0;
+}
+.doc-badge.pdf { background: rgba(255, 95, 86, 0.18); color: var(--error); }
+.doc-badge.md { background: rgba(77, 163, 255, 0.18); color: var(--accent); }
+.doc-name { font-family: var(--mono); font-size: 12.5px; flex: 1; }
+.doc-count { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.doc-open-btn { font-size: 11px; padding: 3px 9px; }
+.dashboard-actions { display: flex; justify-content: center; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.dashboard-actions .primary { background: var(--ok); color: #0b1a0e; border-color: var(--ok); font-weight: 600; }
+.dashboard-actions .primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* ─── workspace: mirrors #app's flex-column layout for main + panel ───────── */
+#workspace { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+/* ─── audit progress overlay ────────────────────────────────────────────── */
+#audit-overlay {
+  position: fixed; inset: 0; background: rgba(10, 11, 13, 0.72);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+/* An explicit `display` on these IDs would otherwise beat the browser's
+   default `[hidden] { display: none }` UA rule (author styles always win
+   over UA styles regardless of specificity) — restore hiding explicitly. */
+#dashboard[hidden], #workspace[hidden], #audit-overlay[hidden] { display: none; }
+.audit-overlay-card {
+  width: 420px; max-width: calc(100vw - 40px); background: var(--bg-panel);
+  border: 1px solid var(--border); border-radius: 10px; padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.audit-overlay-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.progress-bar {
+  height: 8px; border-radius: 4px; background: var(--bg-active); overflow: hidden;
+}
+.progress-fill { height: 100%; background: var(--accent); width: 0; transition: width 0.25s ease; }
+.progress-fill.indeterminate {
+  background: linear-gradient(90deg, var(--bg-active), var(--accent), var(--bg-active));
+  background-size: 200% 100%; animation: indeterminate 1.4s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+#audit-progress-label {
+  margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+}
+.audit-overlay-card .stage-chips { margin-top: 14px; }
 
 /* ─── main area: explorer + editor ───────────────────────────────────────── */
 #main { flex: 1; display: flex; min-height: 0; }
