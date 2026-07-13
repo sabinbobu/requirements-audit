@@ -153,7 +153,7 @@ make api                                # serves the editor-style web UI at http
 `audit --no-llm` and the whole eval gate run offline; `query` and the full `audit`
 call an LLM (OpenAI primary, Anthropic fallback) and require an API key.
 
-The CLI is the primary interface; the API also serves an **editor-style web UI** at `/` — corpus documents render like source files, audit findings appear as inline problems (squiggles + a VS Code-style Problems panel), and query answers cite requirements you can jump to. Self-contained static HTML/CSS/JS: no build step, no extra dependency.
+The CLI is the primary interface; the API also serves an **editor-style web UI** at `/`. It opens on a **dashboard**: pick a document (any format, including an uploaded PDF) and run an audit scoped to it — compared against the rest of the corpus, so it's fast and focused — or sweep the full corpus. A **live progress overlay** (determinate bar + stage chips, driven by the `/audit/stream` SSE endpoint) tracks the run, including per-pair progress through the LLM comparator loop, the slowest stage. Results land in the **workspace**: corpus documents render like source files, audit findings appear as inline problems (squiggles + a VS Code-style Problems panel), and query answers cite requirements you can jump to. Self-contained static HTML/CSS/JS: no build step, no extra dependency.
 
 ## Runbook
 
@@ -163,7 +163,7 @@ The CLI is the primary interface; the API also serves an **editor-style web UI**
 | Regenerate the synthetic corpus + ground truth | `make corpus` |
 | Build the index | `make ingest` (or `POST /ingest`) |
 | Ask a question | `make query Q="…"` (needs a key) |
-| Sweep for contradictions | `make audit` (keyless = deterministic classes) |
+| Sweep for contradictions | `make audit` (keyless = deterministic classes); scope to one doc with `POST /audit {"doc_id": "SYS"}`; stream progress via `POST /audit/stream` (SSE) |
 | Benchmark retrieval strategies | `make benchmark STRATEGIES="lexical dense hybrid hybrid_rerank"` |
 | Run the chunk-size sweep | `make sweep` |
 | Serve the API | `make api` → http://localhost:8000 (OpenAPI docs at `/docs`) |

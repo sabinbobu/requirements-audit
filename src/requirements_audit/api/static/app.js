@@ -9,14 +9,16 @@
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
-  docs: [],            // [{doc_id, chunk_count}]
+  docs: [],            // [{doc_id, chunk_count, source}]
   openDoc: null,       // doc_id currently in the editor
   chunks: {},          // doc_id -> [chunk]
-  findings: [],        // audit findings, as returned by POST /audit
+  findings: [],        // audit findings, as returned by /audit or /audit/stream
   byReq: new Map(),    // requirement_id -> [finding]
   reqDoc: new Map(),   // requirement_id -> doc_id (for jump-to-requirement)
   decisions: new Map(),// finding key -> "accepted" | "dismissed" (session-only;
                        // persisting reviews through the API is a roadmap item)
+  screen: "dashboard", // "dashboard" | "workspace" — the two top-level views
+  dashboardSelection: null, // doc_id selected (not yet opened) on the dashboard
 };
 
 const findingKey = (f) =>
@@ -26,6 +28,50 @@ function rerenderAll() {
   renderProblems();
   renderExplorer();
   renderEditor();
+}
+
+/* ─── screens: dashboard (landing) vs workspace (editor + panel) ───────── */
+function showScreen(name) {
+  state.screen = name;
+  $("#dashboard").hidden = name !== "dashboard";
+  $("#workspace").hidden = name !== "workspace";
+  if (name === "workspace" && state.openDoc) renderEditor();
+}
+
+function docExt(doc) {
+  return (doc.source || "").split(".").pop()?.toLowerCase() || "";
+}
+
+function renderDashboard() {
+  const list = $("#dashboard-doc-list");
+  list.innerHTML = "";
+  for (const d of state.docs) {
+    const ext = docExt(d);
+    const li = document.createElement("li");
+    li.className = "doc-card" + (d.doc_id === state.dashboardSelection ? " selected" : "");
+    li.setAttribute("role", "option");
+    li.innerHTML =
+      `<span class="doc-badge ${ext}">${ext.toUpperCase() || "?"}</span>` +
+      `<span class="doc-name">${d.source || d.doc_id}</span>` +
+      `<span class="doc-count">${d.chunk_count} reqs</span>` +
+      `<button class="doc-open-btn" type="button">open →</button>`;
+    li.onclick = (e) => {
+      if (e.target.closest(".doc-open-btn")) return;
+      state.dashboardSelection = d.doc_id;
+      renderDashboard();
+    };
+    li.querySelector(".doc-open-btn").onclick = (e) => {
+      e.stopPropagation();
+      state.openDoc = d.doc_id;
+      showScreen("workspace");
+    };
+    list.appendChild(li);
+  }
+  const auditBtn = $("#dashboard-audit-btn");
+  auditBtn.disabled = !state.dashboardSelection;
+  auditBtn.textContent = state.dashboardSelection
+    ? `▶ Run audit on ${state.dashboardSelection}`
+    : "▶ Run audit (select a document)";
 }
 
 /* conflict type -> problem severity (superseded refs are warnings: the text is
@@ -65,6 +111,7 @@ async function loadHealth() {
 async function loadDocs() {
   state.docs = await api("/documents");
   renderExplorer();
+  renderDashboard();
   // Preload every doc's chunks: the corpus is small, and jump-to-requirement
   // across documents needs the req -> doc map up front.
   for (const d of state.docs) {
@@ -72,7 +119,10 @@ async function loadDocs() {
     state.chunks[d.doc_id] = detail.chunks;
     for (const c of detail.chunks) state.reqDoc.set(c.requirement_id, d.doc_id);
   }
-  if (!state.openDoc && state.docs.length) openDoc(state.docs[0].doc_id);
+  // Pick a default document for the editor without forcing a render — the
+  // workspace is not visible until the user leaves the dashboard.
+  if (!state.openDoc && state.docs.length) state.openDoc = state.docs[0].doc_id;
+  renderExplorer();
 }
 
 function docProblemCounts(docId) {
@@ -228,37 +278,116 @@ async function jumpTo(reqId) {
   el.classList.add("flash");
 }
 
-/* ─── audit / problems panel ───────────────────────────────────────────── */
-async function runAudit() {
+/* ─── audit progress overlay ────────────────────────────────────────────── */
+function showAuditOverlay(docId) {
+  $("#audit-overlay").hidden = false;
+  $("#audit-overlay-title").textContent = docId ? `Auditing ${docId}…` : "Auditing full corpus…";
+  $("#audit-stage-chips").innerHTML = "";
+  setAuditProgress(null, null);
+}
+
+function hideAuditOverlay() {
+  $("#audit-overlay").hidden = true;
+}
+
+function setAuditProgress(done, total) {
+  const fill = $("#audit-progress-fill");
+  const label = $("#audit-progress-label");
+  if (total) {
+    fill.classList.remove("indeterminate");
+    fill.style.width = `${Math.round((done / total) * 100)}%`;
+    label.textContent = `comparator: ${done} / ${total} pairs`;
+  } else {
+    // No total yet (deterministic stages, or an LLM-free audit): an
+    // indeterminate bar still shows the run is alive.
+    fill.classList.add("indeterminate");
+    fill.style.width = "100%";
+    label.textContent = "preparing…";
+  }
+}
+
+function auditStageChip(stepRecord) {
+  const chip = document.createElement("span");
+  chip.className = "stage-chip done";
+  chip.textContent = `${stepRecord.name} ${stepRecord.latency_ms.toFixed(0)}ms`;
+  return chip;
+}
+
+function applyAuditReport(report) {
+  state.findings = report.findings;
+  state.byReq = new Map();
+  for (const f of report.findings) {
+    for (const req of [f.candidate.req_a, f.candidate.req_b]) {
+      if (!state.byReq.has(req)) state.byReq.set(req, []);
+      state.byReq.get(req).push(f);
+    }
+  }
+  renderProblems();
+  renderExplorer();
+  renderEditor();
+  const mode = report.llm_used ? "LLM-verified" : "deterministic rules (no LLM key)";
+  const scope = report.doc_id ? `scoped to ${report.doc_id}` : "full corpus";
+  status(`audit: ${report.findings.length} problem(s) · ${scope} · ${mode}`);
+  const t = report.trace;
+  stats(
+    `${t.total_latency_ms.toFixed(0)} ms · ${t.usage?.input_tokens ?? 0}/${t.usage?.output_tokens ?? 0} tok` +
+    (t.estimated_usd ? ` · ~$${t.estimated_usd.toFixed(4)}` : "")
+  );
+}
+
+/* ─── audit / problems panel (SSE over fetch, with a progress overlay) ──── */
+async function runAudit(docId) {
   const btn = $("#audit-btn");
   btn.disabled = true;
-  status("running audit…");
+  showAuditOverlay(docId);
+  status(docId ? `auditing ${docId}…` : "auditing full corpus…");
+
   try {
-    const report = await api("/audit", {
+    const res = await fetch("/audit/stream", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ doc_id: docId || null }),
     });
-    state.findings = report.findings;
-    state.byReq = new Map();
-    for (const f of report.findings) {
-      for (const req of [f.candidate.req_a, f.candidate.req_b]) {
-        if (!state.byReq.has(req)) state.byReq.set(req, []);
-        state.byReq.get(req).push(f);
+    if (!res.ok) {
+      const detail = (await res.json()).detail ?? res.statusText;
+      throw new Error(detail);
+    }
+    // Minimal SSE parse: the server emits single-line `event:`/`data:` frames.
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "", event = "", report = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep the trailing partial line
+      for (const line of lines) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) {
+          const data = line.slice(5).trim();
+          if (event === "stage") {
+            $("#audit-stage-chips").appendChild(auditStageChip(JSON.parse(data)));
+          } else if (event === "progress") {
+            const p = JSON.parse(data);
+            setAuditProgress(p.done, p.total);
+          } else if (event === "report") {
+            report = JSON.parse(data);
+          } else if (event === "error") {
+            throw new Error(data);
+          }
+        }
       }
     }
-    renderProblems();
-    renderExplorer();
-    renderEditor();
+    if (!report) throw new Error("audit stream ended with no report");
+
+    hideAuditOverlay();
+    if (docId) await openDoc(docId);
+    showScreen("workspace");
     switchPanel("problems");
-    const mode = report.llm_used ? "LLM-verified" : "deterministic rules (no LLM key)";
-    status(`audit: ${report.findings.length} problem(s) · ${mode}`);
-    const t = report.trace;
-    stats(
-      `${t.total_latency_ms.toFixed(0)} ms · ${t.usage?.input_tokens ?? 0}/${t.usage?.output_tokens ?? 0} tok` +
-      (t.estimated_usd ? ` · ~$${t.estimated_usd.toFixed(4)}` : "")
-    );
+    applyAuditReport(report);
   } catch (e) {
+    hideAuditOverlay();
     status(`audit failed: ${e.message}`);
   } finally {
     btn.disabled = false;
@@ -419,7 +548,12 @@ async function uploadFile(file) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  $("#audit-btn").onclick = runAudit;
+  // Topbar: "Run audit" scopes to whatever document is open in the editor
+  // (full corpus if none) — the dashboard's own button scopes to its picker.
+  $("#audit-btn").onclick = () => runAudit(state.openDoc);
+  $("#dashboard-btn").onclick = () => showScreen("dashboard");
+
+  // Workspace explorer toolbar.
   $("#ingest-btn").onclick = ingest;
   $("#upload-btn").onclick = () => $("#upload-input").click();
   $("#upload-input").onchange = (e) => {
@@ -427,6 +561,25 @@ document.addEventListener("DOMContentLoaded", () => {
     if (file) uploadFile(file);
     e.target.value = ""; // allow re-uploading the same filename
   };
+
+  // Dashboard toolbar — same ingest()/uploadFile() handlers, which already
+  // refresh both the explorer and the dashboard document list.
+  $("#dashboard-ingest-btn").onclick = ingest;
+  $("#dashboard-upload-btn").onclick = () => $("#dashboard-upload-input").click();
+  $("#dashboard-upload-input").onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) uploadFile(file);
+    e.target.value = "";
+  };
+
+  // Dashboard document picker + audit entry points.
+  $("#dashboard-audit-btn").onclick = () => runAudit(state.dashboardSelection);
+  $("#dashboard-audit-all-btn").onclick = () => runAudit(null);
+  $("#dashboard-browse-btn").onclick = () => {
+    if (!state.openDoc && state.docs.length) state.openDoc = state.docs[0].doc_id;
+    showScreen("workspace");
+  };
+
   document.querySelectorAll("#panel-tabs button").forEach(
     (b) => (b.onclick = () => switchPanel(b.dataset.tab))
   );
@@ -435,6 +588,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const q = $("#query-input").value.trim();
     if (q) ask(q);
   };
+
+  showScreen("dashboard");
   loadHealth();
   loadDocs().catch((e) => status(`load failed: ${e.message} — ingest the corpus first (↻)`));
 });

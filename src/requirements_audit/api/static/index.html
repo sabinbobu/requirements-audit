@@ -1,8 +1,9 @@
 <!doctype html>
 <!-- Editor-style UI for requirements-audit. Self-contained: no CDN, no build
-     step — served by the FastAPI app at "/". Layout mimics a code editor:
-     explorer (corpus files) · editor (requirements as source) · problems panel
-     (audit findings, VS Code-style) · answer panel (query results). -->
+     step — served by the FastAPI app at "/". Two screens: a dashboard landing
+     page (pick a document, run an audit) and a workspace (explorer · editor ·
+     problems panel · answer panel), plus an audit-progress overlay shown on
+     top of either while a streamed audit runs. -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -15,53 +16,86 @@
   <div id="app">
 
     <header id="topbar">
+      <button id="dashboard-btn" class="icon-btn" title="Back to dashboard">⌂</button>
       <span class="logo">⬡ requirements<span class="logo-dim">-audit</span></span>
       <form id="query-form" autocomplete="off">
         <input id="query-input" type="text" spellcheck="false"
                placeholder="Ask the corpus…  e.g. What is the watchdog supervision timeout?" />
         <button id="query-btn" type="submit" title="Answer with citations (needs an LLM key)">Ask</button>
       </form>
-      <button id="audit-btn" title="Sweep the corpus for contradictions">▶ Run audit</button>
+      <button id="audit-btn" title="Sweep the open document (or full corpus) for contradictions">▶ Run audit</button>
       <span id="health" class="health" title="API status">…</span>
     </header>
 
-    <div id="main">
-      <aside id="explorer">
-        <div class="pane-title">
-          <span>corpus</span>
-          <span class="pane-actions">
-            <input id="upload-input" type="file" accept=".md,.pdf" hidden />
-            <button id="upload-btn" title="Upload a .md or .pdf requirement spec">⬆</button>
-            <button id="ingest-btn" title="Re-ingest corpus/ (idempotent)">↻</button>
-          </span>
-        </div>
-        <ul id="file-list" role="listbox" aria-label="Corpus documents"></ul>
-      </aside>
+    <section id="dashboard">
+      <div class="dashboard-inner">
+        <h1>⬡ Requirements Audit</h1>
+        <p class="dashboard-sub">Pick a document — including a PDF spec — and run a contradiction audit against the rest of the corpus.</p>
 
-      <section id="editor">
-        <div id="editor-tabs"><span id="open-doc-name" class="editor-tab">no file open</span></div>
-        <div id="editor-body" tabindex="0">
-          <div class="empty-state">
-            <p>⬡</p>
-            <p>Select a document, then <strong>Run audit</strong> to see its problems inline —<br/>
-               or ask the corpus a question from the bar above.</p>
+        <div class="dashboard-toolbar">
+          <input id="dashboard-upload-input" type="file" accept=".md,.pdf" hidden />
+          <button id="dashboard-upload-btn">⬆ Upload a spec</button>
+          <button id="dashboard-ingest-btn">↻ Re-ingest corpus/</button>
+        </div>
+
+        <ul id="dashboard-doc-list" role="listbox" aria-label="Corpus documents"></ul>
+
+        <div class="dashboard-actions">
+          <button id="dashboard-audit-btn" class="primary" disabled>▶ Run audit</button>
+          <button id="dashboard-audit-all-btn">▶ Run full-corpus audit</button>
+          <button id="dashboard-browse-btn">Browse corpus →</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="workspace" hidden>
+      <div id="main">
+        <aside id="explorer">
+          <div class="pane-title">
+            <span>corpus</span>
+            <span class="pane-actions">
+              <input id="upload-input" type="file" accept=".md,.pdf" hidden />
+              <button id="upload-btn" title="Upload a .md or .pdf requirement spec">⬆</button>
+              <button id="ingest-btn" title="Re-ingest corpus/ (idempotent)">↻</button>
+            </span>
           </div>
+          <ul id="file-list" role="listbox" aria-label="Corpus documents"></ul>
+        </aside>
+
+        <section id="editor">
+          <div id="editor-tabs"><span id="open-doc-name" class="editor-tab">no file open</span></div>
+          <div id="editor-body" tabindex="0">
+            <div class="empty-state">
+              <p>⬡</p>
+              <p>Select a document, then <strong>Run audit</strong> to see its problems inline —<br/>
+                 or ask the corpus a question from the bar above.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section id="panel">
+        <nav id="panel-tabs">
+          <button data-tab="problems" class="active">Problems <span id="problem-count" class="badge" hidden></span></button>
+          <button data-tab="answer">Answer</button>
+        </nav>
+        <div id="panel-problems" class="panel-page active">
+          <div class="empty-state small">No audit run yet. <strong>▶ Run audit</strong> sweeps the open document (or full corpus) for contradictions.</div>
+        </div>
+        <div id="panel-answer" class="panel-page">
+          <div class="empty-state small">Ask a question above — the pipeline stages stream in here, then the answer with citations.</div>
         </div>
       </section>
     </div>
 
-    <section id="panel">
-      <nav id="panel-tabs">
-        <button data-tab="problems" class="active">Problems <span id="problem-count" class="badge" hidden></span></button>
-        <button data-tab="answer">Answer</button>
-      </nav>
-      <div id="panel-problems" class="panel-page active">
-        <div class="empty-state small">No audit run yet. <strong>▶ Run audit</strong> sweeps all documents for contradictions.</div>
+    <div id="audit-overlay" hidden>
+      <div class="audit-overlay-card">
+        <h2 id="audit-overlay-title">Auditing…</h2>
+        <div class="progress-bar"><div id="audit-progress-fill" class="progress-fill"></div></div>
+        <div id="audit-progress-label">starting…</div>
+        <div id="audit-stage-chips" class="stage-chips"></div>
       </div>
-      <div id="panel-answer" class="panel-page">
-        <div class="empty-state small">Ask a question above — the pipeline stages stream in here, then the answer with citations.</div>
-      </div>
-    </section>
+    </div>
 
     <footer id="statusbar">
       <span id="status-msg">ready</span>

@@ -13,6 +13,7 @@ whole graph runs deterministically with no keys. The deterministic audit path
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from pydantic_ai import UsageLimits
@@ -141,15 +142,32 @@ def run_audit(
     *,
     model: Model | None = None,
     use_llm: bool | None = None,
+    focus_doc: str | None = None,
+    tracer: Tracer | None = None,
+    progress_cb: Callable[[int, int], None] | None = None,
 ) -> tuple[AuditReport, RunTrace]:
     """Sweep for contradictions.
 
     `use_llm` defaults to whether a model is available: deterministic-only when no
     model (the gate-able path), full hybrid (comparator + Critic) when one is.
+
+    `focus_doc`, when set, scopes candidate generation to pairs involving that
+    document (compared against the rest of the corpus) — a fast, focused audit
+    for a single document instead of the full corpus sweep.
+
+    `tracer` is injectable so callers can observe stages live (the API streams
+    them over SSE), mirroring `answer_query`. `progress_cb(done, total)` reports
+    fine-grained progress through the comparator loop — the run's most
+    expensive (LLM-bound) stage — for a determinate progress bar.
     """
     use_llm = (model is not None) if use_llm is None else use_llm
-    tracer = Tracer("audit", settings, use_llm=use_llm)
+    if tracer is None:
+        tracer = Tracer("audit", settings, use_llm=use_llm, focus_doc=focus_doc)
     limits = usage_limits(settings)
+
+    focus_ids: set[str] | None = None
+    if focus_doc is not None:
+        focus_ids = {c.requirement_id for c in store.chunks_for_doc(focus_doc)}
 
     # Rule-based candidates (numeric mismatch, superseded reference) are
     # high-precision by construction — the keyless gate asserts they flag zero
@@ -161,6 +179,8 @@ def run_audit(
         rule_candidates: list[CandidateContradiction] = list(
             audit_mod.deterministic_candidates(store)
         )
+        if focus_ids is not None:
+            rule_candidates = audit_mod.filter_candidates_by_doc(rule_candidates, focus_ids)
         detail["count"] = len(rule_candidates)
 
     llm_candidates: list[CandidateContradiction] = []
@@ -171,15 +191,18 @@ def run_audit(
         }
         with tracer.step("llm_comparator") as detail:
             pairs = audit_mod.incompatible_candidate_pairs(
-                store, max_pairs=settings.max_audit_pairs, exclude=exclude
+                store, max_pairs=settings.max_audit_pairs, exclude=exclude, focus_doc=focus_doc
             )
-            for pair in pairs:
+            total = len(pairs)
+            for done, pair in enumerate(pairs, start=1):
                 result = comparator_agent.run_sync(
                     comparator_prompt(pair), model=model, usage_limits=limits
                 )
                 _add_usage(detail, result.usage)
                 if result.output.conflicts:
                     llm_candidates.append(to_candidate(pair, result.output))
+                if progress_cb is not None:
+                    progress_cb(done, total)
             detail["pairs_examined"] = len(pairs)
             detail["confirmed"] = len(llm_candidates)
 

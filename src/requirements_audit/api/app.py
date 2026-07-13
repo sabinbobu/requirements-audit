@@ -87,6 +87,17 @@ class QueryRequest(BaseModel):
 class AuditRequest(BaseModel):
     # None = auto: use the LLM when a key is configured (mirrors the CLI flag).
     use_llm: bool | None = None
+    # None = full-corpus sweep; a doc_id scopes candidate generation to that
+    # document (compared against the rest of the corpus) — faster, focused.
+    doc_id: str | None = None
+
+
+class AuditProgress(BaseModel):
+    """Fine-grained progress through the comparator loop, the audit's most
+    expensive (LLM-bound) stage — what a determinate progress bar reads."""
+
+    done: int
+    total: int
 
 
 class TraceSummary(BaseModel):
@@ -116,24 +127,39 @@ class AuditResponse(BaseModel):
     rejected_by_critic: int
     llm_used: bool
     trace: TraceSummary
+    doc_id: str | None = None  # set when the audit was scoped to one document
 
     @classmethod
-    def from_report(cls, report: AuditReport, llm_used: bool, trace: RunTrace) -> AuditResponse:
+    def from_report(
+        cls, report: AuditReport, llm_used: bool, trace: RunTrace, *, doc_id: str | None = None
+    ) -> AuditResponse:
         return cls(
             findings=report.findings,
             candidates_considered=report.candidates_considered,
             rejected_by_critic=report.rejected_by_critic,
             llm_used=llm_used,
             trace=TraceSummary.from_trace(trace),
+            doc_id=doc_id,
         )
+
+
+# Union of everything a streaming endpoint can push through its queue.
+_StreamEvent = StepRecord | AuditProgress
 
 
 class _StreamingTracer(Tracer):
     """A tracer that also pushes each completed step onto a queue, which the
-    SSE generator drains — this is how `/query` streams stages live."""
+    SSE generator drains — this is how `/query` and `/audit/stream` show
+    live progress."""
 
-    def __init__(self, events: queue.Queue[StepRecord | None], settings: Settings, **meta: object):
-        super().__init__("query", settings, **meta)
+    def __init__(
+        self,
+        name: str,
+        events: queue.Queue[_StreamEvent | None],
+        settings: Settings,
+        **meta: object,
+    ) -> None:
+        super().__init__(name, settings, **meta)
         self._events = events
 
     def _emit(self, record: StepRecord) -> None:
@@ -155,6 +181,14 @@ def create_app(
         # One connection per request: SQLite opens are cheap and this keeps the
         # API process free of cross-request state.
         return SqliteStore(settings_.sqlite_path)
+
+    def _require_known_doc(store: SqliteStore, doc_id: str) -> None:
+        # Without this, an unknown focus_doc silently scopes an audit to
+        # nothing (zero candidates touch a document that isn't in the store),
+        # which reads as "no contradictions" instead of "bad request".
+        known_ids = {d for d, _, _ in store.documents()}
+        if doc_id not in known_ids:
+            raise HTTPException(status_code=404, detail=f"Unknown document: {doc_id}")
 
     @app.get("/healthz", response_model=HealthResponse)
     def healthz() -> HealthResponse:
@@ -235,8 +269,83 @@ def create_app(
                 # Auto mode: fall back to the deterministic classes, like the CLI.
         llm_used = model is not None if body.use_llm is None else body.use_llm
         with _store() as store:
-            report, trace = run_audit(store, settings_, model=model, use_llm=llm_used)
-        return AuditResponse.from_report(report, llm_used, trace)
+            if body.doc_id is not None:
+                _require_known_doc(store, body.doc_id)
+            report, trace = run_audit(
+                store, settings_, model=model, use_llm=llm_used, focus_doc=body.doc_id
+            )
+        return AuditResponse.from_report(report, llm_used, trace, doc_id=body.doc_id)
+
+    @app.post("/audit/stream")
+    def audit_stream(body: AuditRequest) -> EventSourceResponse:
+        """SSE stream: `stage` per completed pipeline step, `progress` through
+        the comparator loop (the LLM-bound stage — what a progress bar tracks),
+        then a final `report` (an `AuditResponse`)."""
+        model: Model | None = None
+        if body.use_llm is not False:
+            try:
+                model = build(settings_)
+            except MissingCredentialsError as exc:
+                if body.use_llm:
+                    raise HTTPException(status_code=503, detail=str(exc)) from exc
+        llm_used = model is not None if body.use_llm is None else body.use_llm
+
+        if body.doc_id is not None:
+            with _store() as store:
+                _require_known_doc(store, body.doc_id)
+
+        def events() -> Iterator[ServerSentEvent]:
+            # Starlette runs sync generators in a threadpool, so blocking
+            # queue reads here never stall the event loop.
+            stage_events: queue.Queue[_StreamEvent | None] = queue.Queue()
+            tracer = _StreamingTracer(
+                "audit", stage_events, settings_, use_llm=llm_used, doc_id=body.doc_id
+            )
+            outcome: dict[str, object] = {}
+
+            def progress_cb(done: int, total: int) -> None:
+                stage_events.put(AuditProgress(done=done, total=total))
+
+            def worker() -> None:
+                try:
+                    with _store() as store:
+                        report, trace = run_audit(
+                            store,
+                            settings_,
+                            model=model,
+                            use_llm=llm_used,
+                            focus_doc=body.doc_id,
+                            tracer=tracer,
+                            progress_cb=progress_cb,
+                        )
+                    outcome["report"], outcome["trace"] = report, trace
+                except Exception as exc:  # surfaced to the client as an SSE error event
+                    outcome["error"] = str(exc)
+                finally:
+                    stage_events.put(None)  # sentinel: no more events
+
+            threading.Thread(target=worker, daemon=True).start()
+            while (item := stage_events.get()) is not None:
+                if isinstance(item, AuditProgress):
+                    yield ServerSentEvent(event="progress", data=item.model_dump_json())
+                else:
+                    yield ServerSentEvent(event="stage", data=item.model_dump_json())
+
+            if "error" in outcome:
+                yield ServerSentEvent(event="error", data=str(outcome["error"]))
+                return
+            report = outcome["report"]
+            trace = outcome["trace"]
+            assert isinstance(report, AuditReport)  # narrow the untyped dict for mypy
+            assert isinstance(trace, RunTrace)
+            yield ServerSentEvent(
+                event="report",
+                data=AuditResponse.from_report(
+                    report, llm_used, trace, doc_id=body.doc_id
+                ).model_dump_json(),
+            )
+
+        return EventSourceResponse(events())
 
     @app.post("/query")
     def query(body: QueryRequest) -> EventSourceResponse:
@@ -249,8 +358,8 @@ def create_app(
         def events() -> Iterator[ServerSentEvent]:
             # Starlette runs sync generators in a threadpool, so blocking
             # queue reads here never stall the event loop.
-            stage_events: queue.Queue[StepRecord | None] = queue.Queue()
-            tracer = _StreamingTracer(stage_events, settings_, question=body.question)
+            stage_events: queue.Queue[_StreamEvent | None] = queue.Queue()
+            tracer = _StreamingTracer("query", stage_events, settings_, question=body.question)
             outcome: dict[str, object] = {}
 
             def worker() -> None:
@@ -267,6 +376,7 @@ def create_app(
 
             threading.Thread(target=worker, daemon=True).start()
             while (record := stage_events.get()) is not None:
+                assert isinstance(record, StepRecord)  # /query never emits progress
                 yield ServerSentEvent(event="stage", data=record.model_dump_json())
 
             if "error" in outcome:

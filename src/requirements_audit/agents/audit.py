@@ -110,6 +110,14 @@ def deterministic_candidates(store: SqliteStore) -> list[CandidateContradiction]
     return detect_numeric_mismatches(store) + detect_superseded_references(store)
 
 
+def filter_candidates_by_doc(
+    candidates: list[CandidateContradiction], focus_ids: set[str]
+) -> list[CandidateContradiction]:
+    """Keep only candidates where at least one side belongs to the focus
+    document — scopes a corpus-wide candidate set to a single-document audit."""
+    return [c for c in candidates if c.req_a in focus_ids or c.req_b in focus_ids]
+
+
 def _build(
     store: SqliteStore, req_a: str, req_b: str, conflict_type: ConflictType, source: str
 ) -> CandidateContradiction:
@@ -140,6 +148,7 @@ def incompatible_candidate_pairs(
     rare_df: int = 4,
     max_pairs: int = 60,
     exclude: set[tuple[str, str]] | None = None,
+    focus_doc: str | None = None,
 ) -> list[ChunkPair]:
     """Cross-document candidate pairs for the prose-conflict (incompatible) class.
 
@@ -153,6 +162,10 @@ def incompatible_candidate_pairs(
     Pairs already explained by a deterministic detector (`exclude`) are dropped.
     Near-miss pairs that slip through are intentionally left for the comparator and
     Critic to reject — that is the false-positive-filtering story.
+
+    `focus_doc`, when set, keeps only pairs where one side belongs to that
+    document — scopes the (LLM-bound) comparator sweep to a single document
+    instead of the whole corpus, so a scoped audit makes far fewer LLM calls.
     """
     exclude = exclude or set()
     chunks = store.all_chunks()
@@ -174,6 +187,8 @@ def incompatible_candidate_pairs(
         weight = 1.0 / df[term]
         for req_a, req_b in combinations(sorted(set(req_ids)), 2):
             if doc_of[req_a] == doc_of[req_b]:
+                continue
+            if focus_doc is not None and focus_doc not in (doc_of[req_a], doc_of[req_b]):
                 continue
             key = _ordered(req_a, req_b)
             if key in exclude:
