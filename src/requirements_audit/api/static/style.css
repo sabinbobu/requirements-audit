@@ -94,7 +94,9 @@ button:disabled { opacity: 0.5; cursor: wait; }
 /* An explicit `display` on these IDs would otherwise beat the browser's
    default `[hidden] { display: none }` UA rule (author styles always win
    over UA styles regardless of specificity) — restore hiding explicitly. */
-#dashboard[hidden], #workspace[hidden], #audit-overlay[hidden] { display: none; }
+#dashboard[hidden], #workspace[hidden], #audit-overlay[hidden], #compare-overlay[hidden] {
+  display: none;
+}
 .audit-overlay-card {
   width: 420px; max-width: calc(100vw - 40px); background: var(--bg-panel);
   border: 1px solid var(--border); border-radius: 10px; padding: 24px;
@@ -117,6 +119,58 @@ button:disabled { opacity: 0.5; cursor: wait; }
   margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--text-dim);
 }
 .audit-overlay-card .stage-chips { margin-top: 14px; }
+
+/* ─── compare / resolve (Beyond-Compare-style) ────────────────────────────── */
+#compare-overlay {
+  position: fixed; inset: 0; background: rgba(10, 11, 13, 0.72);
+  display: flex; align-items: center; justify-content: center; z-index: 60;
+  padding: 24px;
+}
+.compare-card {
+  width: 100%; max-width: 920px; max-height: calc(100vh - 48px); overflow-y: auto;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.compare-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.compare-header h2 { font-size: 14px; font-weight: 600; font-family: var(--mono); }
+.compare-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
+.compare-side { background: var(--bg-panel); padding: 16px; min-width: 0; }
+.compare-side-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.compare-doc-label { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.compare-use-btn { font-size: 11px; padding: 3px 9px; white-space: nowrap; }
+.compare-field-label {
+  display: block; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-faint); margin-bottom: 4px;
+}
+.compare-side textarea {
+  width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.5; resize: vertical; outline: none;
+}
+.compare-side textarea:focus { border-color: var(--accent); }
+.compare-params { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.compare-param-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 6px; background: rgba(255, 95, 86, 0.07); border: 1px solid rgba(255, 95, 86, 0.25);
+}
+.compare-param-row label {
+  font-family: var(--mono); font-size: 11.5px; color: var(--error); flex-shrink: 0;
+}
+.compare-param-row input {
+  flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 7px; font-family: var(--mono); font-size: 12px; outline: none;
+}
+.compare-param-row input:focus { border-color: var(--accent); }
+.compare-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 20px; border-top: 1px solid var(--border);
+}
+.compare-status { font-size: 11.5px; color: var(--text-dim); }
+.compare-footer .primary { background: var(--ok); color: #0b1a0e; border-color: var(--ok); font-weight: 600; }
+.compare-footer .primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 /* ─── main area: explorer + editor ───────────────────────────────────────── */
 #main { flex: 1; display: flex; min-height: 0; }
@@ -211,6 +265,8 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .decided.dismissed { color: var(--text-faint); }
 .req-problem-card.dismissed { opacity: 0.5; }
 .problem-row.dismissed { opacity: 0.45; }
+.resolve-btn { padding: 2px 9px; font-size: 11px; color: var(--accent); border-color: var(--accent); }
+.problem-row .resolve-btn { margin-left: 8px; }
 
 /* ─── bottom panel ───────────────────────────────────────────────────────── */
 #panel {

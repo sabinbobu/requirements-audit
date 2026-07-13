@@ -37,8 +37,9 @@ from sse_starlette import EventSourceResponse, ServerSentEvent
 
 from requirements_audit import __version__
 from requirements_audit.config import Settings
+from requirements_audit.corpus.generator import render_markdown
 from requirements_audit.ingestion.parser import parse_file
-from requirements_audit.ingestion.pipeline import IngestReport, ingest_corpus
+from requirements_audit.ingestion.pipeline import IngestReport, ingest_corpus, reconstruct_document
 from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.llm.provider import MissingCredentialsError, build_model
 from requirements_audit.models import AuditReport, Chunk, Finding
@@ -78,6 +79,15 @@ class DocumentDetail(BaseModel):
 
     doc_id: str
     chunks: list[Chunk]
+
+
+class UpdateRequirementRequest(BaseModel):
+    """A resolve edit: `None` leaves a field unchanged; `parameters`, when
+    given, replaces the whole dict (the client already holds the full chunk
+    and sends it back merged with its edit)."""
+
+    text: str | None = None
+    parameters: dict[str, str] | None = None
 
 
 class QueryRequest(BaseModel):
@@ -215,6 +225,32 @@ def create_app(
         if not chunks:
             raise HTTPException(status_code=404, detail=f"Unknown document: {doc_id}")
         return DocumentDetail(doc_id=doc_id, chunks=chunks)
+
+    @app.patch("/requirements/{requirement_id}", response_model=Chunk)
+    def update_requirement(requirement_id: str, body: UpdateRequirementRequest) -> Chunk:
+        """The write path behind the compare/resolve view: edit a requirement's
+        text and/or parameters, then re-audit to see the conflict clear. This
+        endpoint only updates the store and a convenience corrected-copy file —
+        the caller triggers the re-audit (`/audit` or `/audit/stream`) itself.
+        """
+        with _store() as store:
+            updated = store.update_requirement(
+                requirement_id, text=body.text, parameters=body.parameters
+            )
+            if updated is None:
+                raise HTTPException(
+                    status_code=404, detail=f"Unknown requirement: {requirement_id}"
+                )
+            doc = reconstruct_document(store, updated.doc_id)
+
+        # Best-effort convenience artifact: never the original PDF/Markdown,
+        # and never consulted by re-audit (which reads the store directly).
+        if doc is not None:
+            settings_.corrected_dir.mkdir(parents=True, exist_ok=True)
+            (settings_.corrected_dir / f"{updated.doc_id}.md").write_text(
+                render_markdown(doc), encoding="utf-8"
+            )
+        return updated
 
     @app.post("/ingest", response_model=IngestReport)
     def ingest(body: IngestRequest) -> IngestReport:

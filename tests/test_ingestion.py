@@ -17,7 +17,7 @@ from requirements_audit.corpus import generator
 from requirements_audit.ingestion.chunker import chunk_document
 from requirements_audit.ingestion.extract import extract_entities, extract_refs
 from requirements_audit.ingestion.parser import parse_corpus, parse_markdown
-from requirements_audit.ingestion.pipeline import ingest_corpus
+from requirements_audit.ingestion.pipeline import ingest_corpus, reconstruct_document
 from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.models import EntityType, Requirement, RequirementDocument
 
@@ -183,3 +183,86 @@ def test_parse_markdown_handles_comma_in_parameter_value() -> None:
     )
     doc = parse_markdown(md)
     assert doc.requirements[0].parameters == {"cyclic_tasks_ms": "10,50"}
+
+
+# ─── update_requirement / reconstruct_document (the resolve write path) ──────
+def _small_store(tmp_path: Path) -> SqliteStore:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "A.md").write_text(
+        "# Doc A\n\nDocument ID: A\nType: test\n\n## Timing\n\n"
+        "### A-REQ-0001 — Boot time\n\nBoot completes within 800 ms.\n\n"
+        "- Status: active\n- Parameters: boot_ms = 800\n"
+        "### A-REQ-0002 — References\n\nSee B-REQ-0001.\n\n"
+        "- Status: active\n- References: B-REQ-0001\n",
+        encoding="utf-8",
+    )
+    (corpus / "B.md").write_text(
+        "# Doc B\n\nDocument ID: B\nType: test\n\n## Timing\n\n"
+        "### B-REQ-0001 — Boot time\n\nBoot completes within 500 ms.\n\n"
+        "- Status: active\n- Parameters: boot_ms = 500\n",
+        encoding="utf-8",
+    )
+    store = SqliteStore(tmp_path / "s.sqlite")
+    ingest_corpus(corpus, store)
+    return store
+
+
+def test_update_requirement_changes_text_and_hash(tmp_path: Path) -> None:
+    with _small_store(tmp_path) as store:
+        before = store.chunk("A-REQ-0001")
+        assert before is not None
+        updated = store.update_requirement("A-REQ-0001", text="Boot completes within 500 ms.")
+        assert updated is not None
+        assert updated.text == "Boot completes within 500 ms."
+        assert updated.content_hash != before.content_hash
+        assert updated.parameters == before.parameters  # untouched when not given
+
+
+def test_update_requirement_replaces_parameters_and_entities(tmp_path: Path) -> None:
+    with _small_store(tmp_path) as store:
+        updated = store.update_requirement("A-REQ-0001", parameters={"boot_ms": "500"})
+        assert updated is not None
+        assert updated.parameters == {"boot_ms": "500"}
+
+        params = [e for e in store.entities_for_requirement("A-REQ-0001") if e.value is not None]
+        assert len(params) == 1
+        assert params[0].name == "boot_ms" and params[0].value == "500"
+
+
+def test_update_requirement_unknown_id_returns_none(tmp_path: Path) -> None:
+    with _small_store(tmp_path) as store:
+        assert store.update_requirement("NOPE-REQ-0001", text="x") is None
+
+
+def test_update_requirement_resolves_numeric_mismatch(tmp_path: Path) -> None:
+    from requirements_audit.agents.audit import detect_numeric_mismatches
+
+    with _small_store(tmp_path) as store:
+        before = detect_numeric_mismatches(store)
+        assert {frozenset((c.req_a, c.req_b)) for c in before} == {
+            frozenset(("A-REQ-0001", "B-REQ-0001"))
+        }
+
+        store.update_requirement("A-REQ-0001", parameters={"boot_ms": "500"})
+
+        after = detect_numeric_mismatches(store)
+        assert after == []
+
+
+def test_reconstruct_document_round_trips_edited_requirement(tmp_path: Path) -> None:
+    with _small_store(tmp_path) as store:
+        store.update_requirement("A-REQ-0001", text="Boot completes within 500 ms.")
+        doc = reconstruct_document(store, "A")
+        assert doc is not None
+        assert doc.id == "A"
+        req = next(r for r in doc.requirements if r.id == "A-REQ-0001")
+        assert req.text == "Boot completes within 500 ms."
+        assert req.refs == []
+        other = next(r for r in doc.requirements if r.id == "A-REQ-0002")
+        assert other.refs == ["B-REQ-0001"]
+
+
+def test_reconstruct_document_unknown_doc_returns_none(tmp_path: Path) -> None:
+    with _small_store(tmp_path) as store:
+        assert reconstruct_document(store, "NOPE") is None
