@@ -97,6 +97,42 @@
       </div>
     </div>
 
+    <!-- Beyond-Compare-style resolve view: edit either side, sync a
+         differing parameter across, save, and the scoped audit re-runs so
+         the conflict clears live. -->
+    <div id="compare-overlay" hidden>
+      <div class="compare-card">
+        <div class="compare-header">
+          <h2 id="compare-title">Resolve conflict</h2>
+          <button id="compare-close-btn" class="icon-btn" title="Close">✕</button>
+        </div>
+        <div class="compare-body">
+          <div class="compare-side">
+            <div class="compare-side-head">
+              <span id="compare-a-label" class="compare-doc-label"></span>
+              <button class="compare-use-btn" data-use="a" title="Copy this side's differing value(s) to the other side">use this →</button>
+            </div>
+            <label class="compare-field-label">Text</label>
+            <textarea id="compare-a-text" rows="5"></textarea>
+            <div id="compare-a-params" class="compare-params"></div>
+          </div>
+          <div class="compare-side">
+            <div class="compare-side-head">
+              <button class="compare-use-btn" data-use="b" title="Copy this side's differing value(s) to the other side">← use this</button>
+              <span id="compare-b-label" class="compare-doc-label"></span>
+            </div>
+            <label class="compare-field-label">Text</label>
+            <textarea id="compare-b-text" rows="5"></textarea>
+            <div id="compare-b-params" class="compare-params"></div>
+          </div>
+        </div>
+        <div class="compare-footer">
+          <span id="compare-status" class="compare-status"></span>
+          <button id="compare-resolve-btn" class="primary">✓ Save &amp; re-audit</button>
+        </div>
+      </div>
+    </div>
+
     <footer id="statusbar">
       <span id="status-msg">ready</span>
       <span id="status-stats"></span>

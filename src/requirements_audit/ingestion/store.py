@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 
+from requirements_audit.ingestion.chunker import content_hash
 from requirements_audit.models import (
     Chunk,
     CrossRef,
@@ -223,6 +224,49 @@ class SqliteStore:
             "SELECT * FROM chunks WHERE requirement_id = ?", (requirement_id,)
         ).fetchone()
         return None if row is None else self._row_to_chunk(row)
+
+    def update_requirement(
+        self,
+        requirement_id: str,
+        *,
+        text: str | None = None,
+        parameters: dict[str, str] | None = None,
+    ) -> Chunk | None:
+        """Edit a requirement's text and/or parameters in place — the write
+        path behind the UI's "resolve a contradiction" flow. `None` leaves a
+        field unchanged; `parameters`, when given, replaces the whole dict
+        (the caller already has the full chunk and sends it back merged).
+
+        Returns the updated chunk, or `None` if the requirement doesn't
+        exist. Also rewrites the parameter entity rows so a subsequent audit's
+        numeric-mismatch detector sees the new value immediately.
+        """
+        current = self.chunk(requirement_id)
+        if current is None:
+            return None
+
+        new_text = current.text if text is None else text
+        new_parameters = current.parameters if parameters is None else parameters
+
+        with self._conn:  # transaction
+            self._conn.execute(
+                "UPDATE chunks SET text = ?, content_hash = ?, parameters = ? "
+                "WHERE requirement_id = ?",
+                (new_text, content_hash(new_text), json.dumps(new_parameters), requirement_id),
+            )
+            self._conn.execute(
+                "DELETE FROM entities WHERE requirement_id = ? AND entity_type = ?",
+                (requirement_id, EntityType.PARAMETER.value),
+            )
+            self._conn.executemany(
+                "INSERT INTO entities VALUES (?,?,?,?,?)",
+                [
+                    (name, EntityType.PARAMETER.value, requirement_id, current.doc_id, value)
+                    for name, value in new_parameters.items()
+                ],
+            )
+
+        return self.chunk(requirement_id)
 
     def get_section(self, doc_id: str, section: str) -> list[Chunk]:
         """All chunks in a document whose innermost section matches `section`."""

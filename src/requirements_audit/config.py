@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     sqlite_path: Path = Path("data/requirements.sqlite")
     # Where the API saves documents uploaded through the UI before ingesting them.
     uploads_dir: Path = Path("data/uploads")
+    # Where a resolved requirement's document is re-rendered after an edit — a
+    # convenience artifact for review; the store update (not this file) drives
+    # re-audit, and the original PDF/Markdown source is never touched.
+    corrected_dir: Path = Path("data/corrected")
 
     # ─── LangFuse (tracing; absent keys => tracing is a no-op) ───────────────────
     langfuse_host: str | None = None

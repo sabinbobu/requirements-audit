@@ -153,7 +153,7 @@ make api                                # serves the editor-style web UI at http
 `audit --no-llm` and the whole eval gate run offline; `query` and the full `audit`
 call an LLM (OpenAI primary, Anthropic fallback) and require an API key.
 
-The CLI is the primary interface; the API also serves an **editor-style web UI** at `/`. It opens on a **dashboard**: pick a document (any format, including an uploaded PDF) and run an audit scoped to it — compared against the rest of the corpus, so it's fast and focused — or sweep the full corpus. A **live progress overlay** (determinate bar + stage chips, driven by the `/audit/stream` SSE endpoint) tracks the run, including per-pair progress through the LLM comparator loop, the slowest stage. Results land in the **workspace**: corpus documents render like source files, audit findings appear as inline problems (squiggles + a VS Code-style Problems panel), and query answers cite requirements you can jump to. Self-contained static HTML/CSS/JS: no build step, no extra dependency.
+The CLI is the primary interface; the API also serves an **editor-style web UI** at `/`. It opens on a **dashboard**: pick a document (any format, including an uploaded PDF) and run an audit scoped to it — compared against the rest of the corpus, so it's fast and focused — or sweep the full corpus. A **live progress overlay** (determinate bar + stage chips, driven by the `/audit/stream` SSE endpoint) tracks the run, including per-pair progress through the LLM comparator loop, the slowest stage. Results land in the **workspace**: corpus documents render like source files, audit findings appear as inline problems (squiggles + a VS Code-style Problems panel), and query answers cite requirements you can jump to. Every finding also has a **⇄ Resolve** button that opens a Beyond-Compare-style split view — edit either side's text or the specific differing parameter (with a one-click "use this" sync across), save, and the same scoped audit re-runs so the conflict clears live. Self-contained static HTML/CSS/JS: no build step, no extra dependency.
 
 ## Runbook
 
@@ -169,6 +169,7 @@ The CLI is the primary interface; the API also serves an **editor-style web UI**
 | Serve the API | `make api` → http://localhost:8000 (OpenAPI docs at `/docs`) |
 | Open the web UI | `make api`, then http://localhost:8000/ (ships with the API) |
 | Add your own spec | UI explorer ⬆ button, or `POST /upload` a `.md`/`.pdf` (saved to `data/uploads/`, ingested server-side) |
+| Resolve a conflict live | UI Problems row/card → **⇄ Resolve** → edit → Save; or `PATCH /requirements/{id}` (saves a convenience copy to `data/corrected/`, never the original) |
 | Start everything in Docker | `docker compose up -d` (api + qdrant + langfuse) |
 | Run what CI runs | `make check` · eval gate only: `make eval` |
 
@@ -208,10 +209,11 @@ Ordered by what the measurements say matters next:
 1. **Live benchmark runs** — dense/hybrid with real OpenAI embeddings, Ragas + judge + full contradiction recall nightly, both providers through the full eval suite, cost/p95 fleet numbers. (Everything is wired; these need API keys and a scheduled run.)
 2. **Swap the agents' `hybrid_search`** to the winning retrieval strategy — only if the live numbers beat BM25 on this task.
 3. **Persist human review decisions** (accept/dismiss) through the API; today they are session-only in the UI.
-4. **Cross-encoder / LLM reranker** behind the same benchmark row that currently measures the term-coverage reranker.
-5. **Dense vectors at ingest time** against the served Qdrant (the benchmark embeds on the fly today).
-6. **Token-level SSE streaming** on `/query` (stages stream today).
-7. Wire ARXML parsing into the ingestion glob (Markdown + PDF already supported); n8n ingestion automation (paused); Neo4j when multi-hop traceability justifies it; auth + multi-tenancy.
+4. **Resolve view for `superseded_reference` findings** — repointing a reference to its replacement requirement. The resolve view today covers `numeric_mismatch` (parameter sync) and `incompatible_constraint` (free-text edit); superseded references need a "retarget this ref" control instead.
+5. **Cross-encoder / LLM reranker** behind the same benchmark row that currently measures the term-coverage reranker.
+6. **Dense vectors at ingest time** against the served Qdrant (the benchmark embeds on the fly today).
+7. **Token-level SSE streaming** on `/query` (stages stream today).
+8. Wire ARXML parsing into the ingestion glob (Markdown + PDF already supported); n8n ingestion automation (paused); Neo4j when multi-hop traceability justifies it; auth + multi-tenancy.
 
 ## Repository layout
 

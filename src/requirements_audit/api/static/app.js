@@ -19,7 +19,14 @@ const state = {
                        // persisting reviews through the API is a roadmap item)
   screen: "dashboard", // "dashboard" | "workspace" — the two top-level views
   dashboardSelection: null, // doc_id selected (not yet opened) on the dashboard
+  lastAuditDocId: null, // doc_id the most recent audit was scoped to (null = full corpus)
 };
+
+function findChunk(reqId) {
+  const docId = state.reqDoc.get(reqId);
+  if (!docId) return null;
+  return (state.chunks[docId] || []).find((c) => c.requirement_id === reqId) || null;
+}
 
 const findingKey = (f) =>
   `${f.candidate.req_a}|${f.candidate.req_b}|${f.candidate.conflict_type}`;
@@ -199,6 +206,13 @@ function problemCard(finding, ownReq) {
     };
     controls.appendChild(btn);
   }
+  const resolveBtn = document.createElement("button");
+  resolveBtn.className = "resolve-btn";
+  resolveBtn.textContent = "⇄ Resolve";
+  resolveBtn.title = "Compare both sides and edit them to clear this conflict";
+  resolveBtn.onclick = () => openCompare(finding);
+  controls.appendChild(resolveBtn);
+
   if (decision) {
     const tag = document.createElement("span");
     tag.className = `decided ${decision}`;
@@ -315,6 +329,7 @@ function auditStageChip(stepRecord) {
 
 function applyAuditReport(report) {
   state.findings = report.findings;
+  state.lastAuditDocId = report.doc_id ?? null; // "resolve" re-runs this same scope
   state.byReq = new Map();
   for (const f of report.findings) {
     for (const req of [f.candidate.req_a, f.candidate.req_b]) {
@@ -333,6 +348,138 @@ function applyAuditReport(report) {
     `${t.total_latency_ms.toFixed(0)} ms · ${t.usage?.input_tokens ?? 0}/${t.usage?.output_tokens ?? 0} tok` +
     (t.estimated_usd ? ` · ~$${t.estimated_usd.toFixed(4)}` : "")
   );
+}
+
+/* ─── compare / resolve (Beyond-Compare-style) ──────────────────────────── */
+let compareState = null; // { reqA, reqB, diffKeys, orig: {a,b}, edited: {a,b} }
+
+function diffParamKeys(paramsA, paramsB) {
+  const a = paramsA || {}, b = paramsB || {};
+  // Only keys present on both sides with different values are "the conflict" —
+  // a key unique to one side isn't part of what's contradicting.
+  return Object.keys(a).filter((k) => k in b && a[k] !== b[k]);
+}
+
+function openCompare(finding) {
+  const c = finding.candidate;
+  const chunkA = findChunk(c.req_a);
+  const chunkB = findChunk(c.req_b);
+  if (!chunkA || !chunkB) {
+    status("resolve failed: source requirement not loaded — try re-ingesting");
+    return;
+  }
+  compareState = {
+    reqA: c.req_a,
+    reqB: c.req_b,
+    diffKeys: diffParamKeys(chunkA.parameters, chunkB.parameters),
+    orig: {
+      a: { text: chunkA.text, params: { ...chunkA.parameters } },
+      b: { text: chunkB.text, params: { ...chunkB.parameters } },
+    },
+    edited: {
+      a: { text: chunkA.text, params: { ...chunkA.parameters } },
+      b: { text: chunkB.text, params: { ...chunkB.parameters } },
+    },
+  };
+  $("#compare-title").textContent = `Resolve: ${c.req_a} ↔ ${c.req_b}`;
+  renderCompare();
+  $("#compare-status").textContent = "";
+  $("#compare-resolve-btn").disabled = false;
+  $("#compare-overlay").hidden = false;
+}
+
+function closeCompare() {
+  $("#compare-overlay").hidden = true;
+  compareState = null;
+}
+
+function renderCompare() {
+  const { reqA, reqB, diffKeys, edited } = compareState;
+  const chunkA = findChunk(reqA), chunkB = findChunk(reqB);
+  $("#compare-a-label").textContent = `${chunkA.doc_id} · ${reqA}`;
+  $("#compare-b-label").textContent = `${chunkB.doc_id} · ${reqB}`;
+  $("#compare-a-text").value = edited.a.text;
+  $("#compare-b-text").value = edited.b.text;
+
+  for (const useBtn of document.querySelectorAll(".compare-use-btn")) {
+    useBtn.hidden = diffKeys.length === 0; // nothing to sync for a pure-text conflict
+  }
+
+  for (const side of ["a", "b"]) {
+    const container = $(`#compare-${side}-params`);
+    container.innerHTML = "";
+    for (const key of diffKeys) {
+      const row = document.createElement("div");
+      row.className = "compare-param-row diff";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = edited[side].params[key] ?? "";
+      input.oninput = (e) => { compareState.edited[side].params[key] = e.target.value; };
+      const label = document.createElement("label");
+      label.textContent = key;
+      row.append(label, input);
+      container.appendChild(row);
+    }
+  }
+}
+
+function useSide(side) {
+  const other = side === "a" ? "b" : "a";
+  for (const key of compareState.diffKeys) {
+    compareState.edited[other].params[key] = compareState.edited[side].params[key];
+  }
+  renderCompare();
+}
+
+function _sideChanged(side) {
+  const { orig, edited } = compareState;
+  return (
+    edited[side].text !== orig[side].text ||
+    JSON.stringify(edited[side].params) !== JSON.stringify(orig[side].params)
+  );
+}
+
+async function resolveCompare() {
+  const { reqA, reqB, edited } = compareState;
+  const btn = $("#compare-resolve-btn");
+  btn.disabled = true;
+  $("#compare-status").textContent = "saving…";
+
+  try {
+    const edits = [];
+    if (_sideChanged("a")) edits.push([reqA, edited.a]);
+    if (_sideChanged("b")) edits.push([reqB, edited.b]);
+    if (!edits.length) {
+      $("#compare-status").textContent = "no changes to save";
+      btn.disabled = false;
+      return;
+    }
+
+    const updated = await Promise.all(
+      edits.map(([reqId, side]) =>
+        api(`/requirements/${encodeURIComponent(reqId)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: side.text, parameters: side.params }),
+        })
+      )
+    );
+    // Refresh the locally cached chunks so the editor reflects the edit
+    // immediately, even before the re-audit's response comes back.
+    for (const chunk of updated) {
+      const list = state.chunks[chunk.doc_id];
+      if (list) {
+        const idx = list.findIndex((c) => c.requirement_id === chunk.requirement_id);
+        if (idx >= 0) list[idx] = chunk;
+      }
+    }
+    const rescopeTo = state.lastAuditDocId;
+    closeCompare();
+    await runAudit(rescopeTo);
+  } catch (e) {
+    $("#compare-status").textContent = `save failed: ${e.message}`;
+    btn.disabled = false;
+  }
 }
 
 /* ─── audit / problems panel (SSE over fetch, with a progress overlay) ──── */
@@ -418,6 +565,14 @@ function renderProblems() {
       ` — “${c.evidence_quote_a}” vs “${c.evidence_quote_b}”</span>` +
       `<span class="conf">${(f.verdict.confidence * 100).toFixed(0)}%</span>`;
     row.onclick = () => jumpTo(c.req_a);
+    const resolveBtn = document.createElement("button");
+    resolveBtn.className = "resolve-btn";
+    resolveBtn.textContent = "⇄ Resolve";
+    resolveBtn.onclick = (e) => {
+      e.stopPropagation();
+      openCompare(f);
+    };
+    row.appendChild(resolveBtn);
     page.appendChild(row);
   }
 }
@@ -588,6 +743,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const q = $("#query-input").value.trim();
     if (q) ask(q);
   };
+
+  // Compare / resolve overlay.
+  $("#compare-close-btn").onclick = closeCompare;
+  $("#compare-resolve-btn").onclick = resolveCompare;
+  document.querySelectorAll(".compare-use-btn").forEach(
+    (b) => (b.onclick = () => useSide(b.dataset.use))
+  );
+  $("#compare-a-text").oninput = (e) => { if (compareState) compareState.edited.a.text = e.target.value; };
+  $("#compare-b-text").oninput = (e) => { if (compareState) compareState.edited.b.text = e.target.value; };
 
   showScreen("dashboard");
   loadHealth();

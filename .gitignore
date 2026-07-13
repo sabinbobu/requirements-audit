@@ -83,6 +83,8 @@ langfuse_postgres/
 *.db
 # User documents uploaded through the UI — never commit them.
 data/uploads/
+# Corrected-document copies written after a resolve — regenerated, not source.
+data/corrected/
 
 # ─── Logs & traces ────────────────────────────────────────────────────────
 *.log

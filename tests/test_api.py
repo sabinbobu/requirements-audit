@@ -25,6 +25,7 @@ def _settings(tmp_path: Path) -> Settings:
         openai_api_key=None,
         sqlite_path=tmp_path / "api-test.sqlite",
         uploads_dir=tmp_path / "uploads",
+        corrected_dir=tmp_path / "corrected",
     )
 
 
@@ -113,6 +114,64 @@ def test_document_detail_returns_chunks_in_document_order(ingested_client: TestC
 
 def test_document_detail_unknown_doc_is_404(ingested_client: TestClient) -> None:
     assert ingested_client.get("/documents/NOPE").status_code == 404
+
+
+# ─── PATCH /requirements/{id} (the resolve write path) ─────────────────────────
+def test_patch_requirement_updates_text_and_writes_corrected_copy(
+    ingested_client: TestClient, tmp_path: Path
+) -> None:
+    resp = ingested_client.patch(
+        "/requirements/SYS-REQ-0101", json={"text": "Rewritten watchdog behavior."}
+    )
+    assert resp.status_code == 200, resp.text
+    chunk = resp.json()
+    assert chunk["requirement_id"] == "SYS-REQ-0101"
+    assert chunk["text"] == "Rewritten watchdog behavior."
+
+    # A convenience artifact only — never the original source, and not
+    # consulted by re-audit (which reads the store directly).
+    corrected = tmp_path / "corrected" / "SYS.md"
+    assert corrected.exists()
+    assert "Rewritten watchdog behavior." in corrected.read_text(encoding="utf-8")
+
+
+def test_patch_requirement_replaces_parameters(ingested_client: TestClient) -> None:
+    resp = ingested_client.patch(
+        "/requirements/SYS-REQ-0101", json={"parameters": {"watchdog_timeout_ms": "250"}}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parameters"] == {"watchdog_timeout_ms": "250"}
+
+
+def test_patch_requirement_unknown_is_404(ingested_client: TestClient) -> None:
+    resp = ingested_client.patch("/requirements/NOPE-REQ-0001", json={"text": "x"})
+    assert resp.status_code == 404
+
+
+def test_patch_requirement_resolves_scoped_numeric_mismatch(
+    ingested_client: TestClient,
+) -> None:
+    """The exact "Beyond Compare" loop: a scoped audit shows a numeric
+    conflict, the losing side is edited to match, and re-running the same
+    scoped audit no longer reports it."""
+    target = frozenset(("SWC-REQ-0101", "SYS-REQ-0101"))
+
+    before = ingested_client.post("/audit", json={"doc_id": "SYS"}).json()
+    before_pairs = {
+        frozenset((f["candidate"]["req_a"], f["candidate"]["req_b"])) for f in before["findings"]
+    }
+    assert target in before_pairs
+
+    resp = ingested_client.patch(
+        "/requirements/SYS-REQ-0101", json={"parameters": {"watchdog_timeout_ms": "250"}}
+    )
+    assert resp.status_code == 200
+
+    after = ingested_client.post("/audit", json={"doc_id": "SYS"}).json()
+    after_pairs = {
+        frozenset((f["candidate"]["req_a"], f["candidate"]["req_b"])) for f in after["findings"]
+    }
+    assert target not in after_pairs
 
 
 # ─── /upload ──────────────────────────────────────────────────────────────────
