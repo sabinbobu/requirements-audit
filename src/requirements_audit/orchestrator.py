@@ -151,52 +151,60 @@ def run_audit(
     tracer = Tracer("audit", settings, use_llm=use_llm)
     limits = usage_limits(settings)
 
+    # Rule-based candidates (numeric mismatch, superseded reference) are
+    # high-precision by construction — the keyless gate asserts they flag zero
+    # near-misses — so they bypass the Critic and are auto-confirmed. Only the
+    # LLM comparator's prose candidates need the Critic's false-positive filter;
+    # running the Critic over the rule candidates too made it over-reject them
+    # (dropping correct superseded findings below the deterministic recall floor).
     with tracer.step("deterministic_candidates") as detail:
-        candidates: list[CandidateContradiction] = list(audit_mod.deterministic_candidates(store))
-        detail["count"] = len(candidates)
+        rule_candidates: list[CandidateContradiction] = list(
+            audit_mod.deterministic_candidates(store)
+        )
+        detail["count"] = len(rule_candidates)
 
+    llm_candidates: list[CandidateContradiction] = []
     if use_llm:
         exclude: set[tuple[str, str]] = {
-            (c.req_a, c.req_b) if c.req_a <= c.req_b else (c.req_b, c.req_a) for c in candidates
+            (c.req_a, c.req_b) if c.req_a <= c.req_b else (c.req_b, c.req_a)
+            for c in rule_candidates
         }
         with tracer.step("llm_comparator") as detail:
             pairs = audit_mod.incompatible_candidate_pairs(
                 store, max_pairs=settings.max_audit_pairs, exclude=exclude
             )
-            confirmed = 0
             for pair in pairs:
                 result = comparator_agent.run_sync(
                     comparator_prompt(pair), model=model, usage_limits=limits
                 )
                 _add_usage(detail, result.usage)
                 if result.output.conflicts:
-                    candidates.append(to_candidate(pair, result.output))
-                    confirmed += 1
+                    llm_candidates.append(to_candidate(pair, result.output))
             detail["pairs_examined"] = len(pairs)
-            detail["confirmed"] = confirmed
+            detail["confirmed"] = len(llm_candidates)
 
-    findings: list[Finding] = []
+    # Rule candidates go straight to findings; the Critic verifies only the
+    # comparator's candidates.
+    findings: list[Finding] = [Finding(candidate=c, verdict=_RULE_VERDICT) for c in rule_candidates]
     rejected = 0
     with tracer.step("critic") as detail:
-        for candidate in candidates:
-            if use_llm:
-                critic_result = critic_agent.run_sync(
-                    critic_prompt(candidate), model=model, usage_limits=limits
-                )
-                _add_usage(detail, critic_result.usage)
-                verdict = critic_result.output
-            else:
-                verdict = _RULE_VERDICT
-            if verdict.is_conflict:
-                findings.append(Finding(candidate=candidate, verdict=verdict))
+        for candidate in llm_candidates:
+            critic_result = critic_agent.run_sync(
+                critic_prompt(candidate), model=model, usage_limits=limits
+            )
+            _add_usage(detail, critic_result.usage)
+            if critic_result.output.is_conflict:
+                findings.append(Finding(candidate=candidate, verdict=critic_result.output))
             else:
                 rejected += 1
+        detail["rule_bypassed"] = len(rule_candidates)
+        detail["critic_reviewed"] = len(llm_candidates)
         detail["confirmed"] = len(findings)
         detail["rejected"] = rejected
 
     report = AuditReport(
         findings=findings,
-        candidates_considered=len(candidates),
+        candidates_considered=len(rule_candidates) + len(llm_candidates),
         rejected_by_critic=rejected,
     )
     trace = _finish_with_usage(tracer, settings, findings=len(findings), rejected=rejected)

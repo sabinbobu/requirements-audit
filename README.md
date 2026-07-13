@@ -126,9 +126,9 @@ Everything below reproduces offline with no API keys (`make benchmark`, `make sw
 | Pipeline | Precision | Recall | Near-miss FP rate |
 |---|---|---|---|
 | Deterministic rules only (no LLM, gated in CI) | 0.917 | 0.733 (11/15) | 0/5 |
-| + LLM comparator & Critic (full pipeline) | _nightly / live run_ | _nightly / live run_ | _nightly / live run_ |
+| + LLM comparator & Critic (full pipeline, gpt-4o-mini) | 0.79 | 1.00 (15/15) | 0/5 |
 
-The four conflicts the deterministic rules cannot reach are the prose `incompatible_constraint` cases (C07–C10) — that is precisely the LLM comparator's job, and the oracle wiring test proves the pipeline recovers 15/15 given correct judgements.
+The four conflicts the deterministic rules cannot reach are the prose `incompatible_constraint` cases (C07–C10) — that is precisely the LLM comparator's job. Live numbers are from a real run (~$0.006, ~110 s). Rule candidates bypass the Critic (they are high-precision by construction), so the deterministic recall is preserved and the comparator adds the prose class, reaching 15/15. Precision ~0.79 reflects gpt-4o-mini leaving a few comparator false positives through the Critic; no designated near-miss was ever flagged.
 
 ### Cost & latency
 
