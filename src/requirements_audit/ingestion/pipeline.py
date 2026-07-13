@@ -8,13 +8,14 @@ ledger delta (new / updated / unchanged documents).
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from requirements_audit.ingestion.chunker import chunk_document, content_hash
+from requirements_audit.ingestion.chunker import chunk_document
 from requirements_audit.ingestion.extract import extract_entities, extract_refs
-from requirements_audit.ingestion.parser import parse_markdown
+from requirements_audit.ingestion.parser import corpus_paths, parse_file
 from requirements_audit.ingestion.store import SqliteStore
 
 
@@ -29,14 +30,15 @@ class IngestReport(BaseModel):
 
 
 def ingest_corpus(corpus_dir: Path, store: SqliteStore) -> IngestReport:
-    paths = sorted(corpus_dir.glob("*.md"))
-    parsed = [(p, p.read_text(encoding="utf-8")) for p in paths]
-    docs = [parse_markdown(raw) for _, raw in parsed]
+    paths = corpus_paths(corpus_dir)  # *.md and *.pdf, ordered by filename
+    docs = [parse_file(p) for p in paths]
     known_ids = {req.id for doc in docs for req in doc.requirements}
 
     report = IngestReport()
-    for (path, raw), doc in zip(parsed, docs, strict=True):
-        doc_hash = content_hash(raw)
+    for path, doc in zip(paths, docs, strict=True):
+        # Hash the raw bytes: works for both formats, and a re-exported PDF
+        # re-ingests only when its bytes actually changed.
+        doc_hash = hashlib.sha256(path.read_bytes()).hexdigest()
         if store.document_hash(doc.id) == doc_hash:
             report.unchanged_docs.append(doc.id)
             continue

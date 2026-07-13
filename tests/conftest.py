@@ -13,15 +13,15 @@ from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.models import Contradiction
 
 _ROOT = Path(__file__).resolve().parents[1]
-_CORPUS = _ROOT / "corpus"
 _CONTRADICTIONS = _ROOT / "evals" / "contradictions.json"
 
 
 @pytest.fixture
-def store() -> Iterator[SqliteStore]:
-    """A fresh in-memory store with the full corpus ingested."""
+def store(generated_corpus: Path) -> Iterator[SqliteStore]:
+    """A fresh in-memory store with the generated corpus ingested (hermetic:
+    user documents added to the repo's corpus/ never affect tests)."""
     with SqliteStore(":memory:") as s:
-        ingest_corpus(_CORPUS, s)
+        ingest_corpus(generated_corpus, s)
         yield s
 
 

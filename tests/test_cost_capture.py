@@ -13,7 +13,7 @@ from requirements_audit.ingestion.store import SqliteStore
 from requirements_audit.llm.pricing import MODEL_PRICING_USD_PER_MTOK, estimate_usd
 from requirements_audit.orchestrator import answer_query, run_audit
 from tests.test_agents import _qa_fn
-from tests.test_api import _CORPUS, _qa_model, _settings
+from tests.test_api import _qa_model, _settings
 
 
 def test_estimate_usd_prices_pinned_models_and_refuses_unknown() -> None:
@@ -50,9 +50,9 @@ def test_deterministic_audit_reports_zero_usage(store: SqliteStore) -> None:
     assert trace.metadata["estimated_usd"] in (0.0, None)
 
 
-def test_api_trace_summary_exposes_usage(tmp_path: Path) -> None:
+def test_api_trace_summary_exposes_usage(tmp_path: Path, generated_corpus: Path) -> None:
     client = TestClient(create_app(_settings(tmp_path), model_factory=_qa_model))
-    assert client.post("/ingest", json={"corpus_dir": str(_CORPUS)}).status_code == 200
+    assert client.post("/ingest", json={"corpus_dir": str(generated_corpus)}).status_code == 200
 
     audit_trace = client.post("/audit", json={"use_llm": False}).json()["trace"]
     assert audit_trace["usage"]["requests"] == 0

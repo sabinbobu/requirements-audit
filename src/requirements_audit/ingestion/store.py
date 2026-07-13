@@ -200,12 +200,15 @@ class SqliteStore:
         rows = self._conn.execute("SELECT * FROM chunks ORDER BY id").fetchall()
         return [self._row_to_chunk(row) for row in rows]
 
-    def documents(self) -> list[tuple[str, int]]:
-        """(doc_id, chunk_count) per ingested document, from the ledger."""
+    def documents(self) -> list[tuple[str, int, str]]:
+        """(doc_id, chunk_count, source_path) per ingested document, from the ledger."""
         rows = self._conn.execute(
-            "SELECT doc_id, chunk_count FROM ledger ORDER BY doc_id"
+            "SELECT doc_id, chunk_count, source_path FROM ledger ORDER BY doc_id"
         ).fetchall()
-        return [(str(row["doc_id"]), int(row["chunk_count"])) for row in rows]
+        return [
+            (str(row["doc_id"]), int(row["chunk_count"]), str(row["source_path"] or ""))
+            for row in rows
+        ]
 
     def chunks_for_doc(self, doc_id: str) -> list[Chunk]:
         """A document's chunks in requirement-id order (zero-padded IDs sort

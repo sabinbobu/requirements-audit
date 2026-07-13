@@ -27,9 +27,11 @@ _EVALS = _ROOT / "evals"
 
 
 @pytest.fixture
-def store() -> Iterator[SqliteStore]:
+def store(generated_corpus: Path) -> Iterator[SqliteStore]:
+    """Hermetic: the eval gate measures the *generated* corpus, so user
+    documents dropped into the repo's corpus/ never move the eval numbers."""
     with SqliteStore(":memory:") as s:
-        ingest_corpus(_CORPUS, s)
+        ingest_corpus(generated_corpus, s)
         yield s
 
 

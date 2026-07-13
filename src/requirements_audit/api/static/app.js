@@ -94,7 +94,7 @@ function renderExplorer() {
     li.setAttribute("role", "option");
     if (d.doc_id === state.openDoc) li.classList.add("active");
     const name = document.createElement("span");
-    name.textContent = `${d.doc_id}.md`;
+    name.textContent = d.source || d.doc_id; // real filename: SYS.md, BRAKE.pdf, …
     li.appendChild(name);
     const { errors, warnings } = docProblemCounts(d.doc_id);
     if (errors || warnings) {
@@ -161,7 +161,8 @@ function problemCard(finding, ownReq) {
 }
 
 function renderEditor() {
-  $("#open-doc-name").textContent = `${state.openDoc}.md`;
+  const openMeta = state.docs.find((d) => d.doc_id === state.openDoc);
+  $("#open-doc-name").textContent = openMeta?.source || state.openDoc;
   const body = $("#editor-body");
   body.innerHTML = "";
   let lastSection = null;
