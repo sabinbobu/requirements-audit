@@ -21,6 +21,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from requirements_audit.agents.analyst import analyst_agent
+from requirements_audit.agents.audit import deterministic_candidates
 from requirements_audit.agents.comparator import ComparisonResult, comparator_prompt, to_candidate
 from requirements_audit.agents.planner import planner_agent, quick_route
 from requirements_audit.config import Settings
@@ -168,12 +169,57 @@ def test_audit_oracle_recovers_all_conflicts(
         )
 
     settings = Settings()
-    report, _trace = run_audit(store, settings, model=FunctionModel(oracle), use_llm=True)
+    report, trace = run_audit(store, settings, model=FunctionModel(oracle), use_llm=True)
     found = {frozenset((f.candidate.req_a, f.candidate.req_b)) for f in report.findings}
     assert true_pairs <= found, f"missed {true_pairs - found}"
     assert not (near_miss_pairs & found), near_miss_pairs & found
-    # The Critic rejected at least the filler reference-to-superseded false positive.
-    assert report.rejected_by_critic >= 1
+    # Rule candidates bypass the Critic; only the comparator's candidates are reviewed.
+    critic_step = next(s for s in trace.steps if s.name == "critic")
+    assert critic_step.detail["rule_bypassed"] == len(deterministic_candidates(store))
+
+
+def test_rule_candidates_bypass_the_critic(
+    store: SqliteStore, true_pairs: set[frozenset[str]]
+) -> None:
+    """A Critic that rejects everything must not touch the deterministic findings:
+    numeric/superseded candidates are high-precision by construction and bypass it."""
+
+    def reject_all(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if "conflicts" in _output_props(info):  # comparator: propose nothing
+            return _final(info, {"conflicts": False})
+        return _final(info, {"is_conflict": False, "confidence": 0.0, "rationale": "reject"})
+
+    report, _trace = run_audit(store, Settings(), model=FunctionModel(reject_all), use_llm=True)
+    found = {frozenset((f.candidate.req_a, f.candidate.req_b)) for f in report.findings}
+    rule_pairs = {frozenset((c.req_a, c.req_b)) for c in deterministic_candidates(store)}
+    # Every deterministic candidate survived despite the always-reject Critic.
+    assert rule_pairs <= found
+    assert len(true_pairs & found) >= 10
+    assert all(f.verdict.confidence == 1.0 for f in report.findings)
+
+
+def test_critic_filters_comparator_false_positives(
+    store: SqliteStore, true_pairs: set[frozenset[str]], near_miss_pairs: set[frozenset[str]]
+) -> None:
+    """A comparator that confirms every pair, paired with a truth-oracle Critic:
+    the Critic rejects the non-conflicts, so no near-miss reaches the findings."""
+
+    def confirm_then_verify(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        ids = re.findall(r"Requirement (\S+?):", _prompt_text(messages))
+        is_true = len(ids) >= 2 and frozenset(ids[:2]) in true_pairs
+        if "conflicts" in _output_props(info):  # comparator: confirm everything
+            return _final(info, {"conflicts": True})
+        return _final(
+            info,
+            {"is_conflict": is_true, "confidence": 1.0 if is_true else 0.0, "rationale": "verify"},
+        )
+
+    report, _trace = run_audit(
+        store, Settings(), model=FunctionModel(confirm_then_verify), use_llm=True
+    )
+    found = {frozenset((f.candidate.req_a, f.candidate.req_b)) for f in report.findings}
+    assert report.rejected_by_critic >= 1  # the Critic filtered the confirmed non-conflicts
+    assert not (near_miss_pairs & found)
 
 
 def test_deterministic_audit_needs_no_model(
