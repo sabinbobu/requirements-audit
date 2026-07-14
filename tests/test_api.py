@@ -92,9 +92,21 @@ def test_index_serves_the_editor_ui(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "Requirements Audit" in response.text
+    # Workspace chrome added in the IDE overhaul: corpus dropdown, problems
+    # filter/search, and the stale-audit indicator.
+    for anchor in ("corpus-menu-list", "problem-search", "problem-filter", "stale-indicator"):
+        assert anchor in response.text, anchor
     # The self-contained assets resolve through the /static mount.
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
+
+
+def test_static_app_js_uses_localstorage_history_keys(client: TestClient) -> None:
+    # Audit history + resolution edits persist client-side; guard the key names
+    # the browser relies on so a silent rename can't strand a user's history.
+    app_js = client.get("/static/app.js").text
+    assert "ra.auditHistory" in app_js
+    assert "ra.edits" in app_js
 
 
 def test_documents_lists_ingested_docs_in_order(ingested_client: TestClient) -> None:

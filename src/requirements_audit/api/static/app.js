@@ -11,6 +11,7 @@ const $ = (sel) => document.querySelector(sel);
 const state = {
   docs: [],            // [{doc_id, chunk_count, source}]
   openDoc: null,       // doc_id currently in the editor
+  openTabs: [],        // ordered doc_ids open as editor tabs
   chunks: {},          // doc_id -> [chunk]
   findings: [],        // audit findings, as returned by /audit or /audit/stream
   byReq: new Map(),    // requirement_id -> [finding]
@@ -20,7 +21,81 @@ const state = {
   screen: "dashboard", // "dashboard" | "workspace" — the two top-level views
   dashboardSelection: null, // doc_id selected (not yet opened) on the dashboard
   lastAuditDocId: null, // doc_id the most recent audit was scoped to (null = full corpus)
+  editsSinceAudit: new Set(), // requirement_ids edited since the last completed
+                       // audit — drives the "results are stale" indicator (session-only)
+  problemFilter: "all",// Problems panel severity filter: "all" | "error" | "warning"
+  problemSearch: "",   // Problems panel free-text filter
+  history: [],         // audit history shown in the explorer (mirrors ra.auditHistory)
+  edits: {},           // requirement_id -> {text, parameters, ts}: first-ever original
+                       // text of a resolved requirement (mirrors ra.edits), used to
+                       // render the old-vs-new inline diff and survive reloads
 };
+
+/* ─── localStorage-backed persistence (history + resolution edits) ────────── */
+const LS_HISTORY = "ra.auditHistory";
+const LS_EDITS = "ra.edits";
+function lsGet(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function lsSet(key, value) {
+  // Private mode / quota errors degrade the feature to session-only, never fatal.
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+}
+
+function timeAgo(ts) {
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 45) return "just now";
+  if (s < 90) return "1 min ago";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 5400) return "1 hr ago";
+  if (s < 86400) return `${Math.round(s / 3600)} hr ago`;
+  return `${Math.round(s / 86400)} d ago`;
+}
+
+/* ─── word-level LCS diff (Beyond-Compare-style highlighting, no deps) ─────── */
+// Returns merged ops: [{t:"same"|"del"|"ins", s}]. Whitespace runs are their own
+// tokens so they take part in the match and spacing is reproduced exactly.
+function diffWords(oldText, newText) {
+  const a = (oldText || "").match(/\S+|\s+/g) ?? [];
+  const b = (newText || "").match(/\S+|\s+/g) ?? [];
+  const n = a.length, m = b.length;
+  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const ops = [];
+  const push = (t, s) => {
+    if (ops.length && ops[ops.length - 1].t === t) ops[ops.length - 1].s += s;
+    else ops.push({ t, s });
+  };
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { push("same", a[i]); i++; j++; }
+    else if (lcs[i + 1][j] >= lcs[i][j + 1]) push("del", a[i++]);
+    else push("ins", b[j++]);
+  }
+  while (i < n) push("del", a[i++]);
+  while (j < m) push("ins", b[j++]);
+  return ops;
+}
+
+// Render diff ops into `container`. `classes` maps op type -> CSS class (falsy =
+// plain text, op skipped entirely). Always textContent — never innerHTML the text.
+function renderDiffSpans(container, ops, classes) {
+  container.innerHTML = "";
+  for (const op of ops) {
+    if (!(op.t in classes)) continue; // dropped types (e.g. show only same+del)
+    const cls = classes[op.t];
+    if (cls) {
+      const span = document.createElement("span");
+      span.className = cls;
+      span.textContent = op.s;
+      container.appendChild(span);
+    } else {
+      container.appendChild(document.createTextNode(op.s));
+    }
+  }
+}
 
 function findChunk(reqId) {
   const docId = state.reqDoc.get(reqId);
@@ -34,6 +109,7 @@ const findingKey = (f) =>
 function rerenderAll() {
   renderProblems();
   renderExplorer();
+  renderTabs();
   renderEditor();
 }
 
@@ -42,7 +118,7 @@ function showScreen(name) {
   state.screen = name;
   $("#dashboard").hidden = name !== "dashboard";
   $("#workspace").hidden = name !== "workspace";
-  if (name === "workspace" && state.openDoc) renderEditor();
+  if (name === "workspace") { renderTabs(); renderEditor(); }
 }
 
 function docExt(doc) {
@@ -67,9 +143,9 @@ function renderDashboard() {
       state.dashboardSelection = d.doc_id;
       renderDashboard();
     };
-    li.querySelector(".doc-open-btn").onclick = (e) => {
+    li.querySelector(".doc-open-btn").onclick = async (e) => {
       e.stopPropagation();
-      state.openDoc = d.doc_id;
+      await openDoc(d.doc_id);
       showScreen("workspace");
     };
     list.appendChild(li);
@@ -91,6 +167,36 @@ const SEVERITY = {
 
 const status = (msg) => { $("#status-msg").textContent = msg; };
 const stats = (msg) => { $("#status-stats").textContent = msg; };
+
+/* Reflect "edits made since the last completed audit" — the results on screen no
+ * longer match the current text until the user re-runs the audit manually. */
+function renderStale() {
+  const n = state.editsSinceAudit.size;
+  const el = $("#stale-indicator");
+  el.hidden = n === 0;
+  el.textContent = n ? `● ${n} edit(s) since last audit — results may be stale` : "";
+  $("#audit-btn").classList.toggle("stale", n > 0);
+}
+
+// Whether a finding is stale because one of its requirements was just edited.
+function findingIsStale(c) {
+  return state.editsSinceAudit.has(c.req_a) || state.editsSinceAudit.has(c.req_b);
+}
+
+/* After a completed audit, drop the inline-diff snapshot for any edited
+ * requirement the audit covered and found clean — "the edit worked". A scoped
+ * audit only clears requirements in the doc it covered. */
+function clearResolvedEdits(report) {
+  let changed = false;
+  for (const reqId of Object.keys(state.edits)) {
+    const covered = report.doc_id == null || report.doc_id === state.reqDoc.get(reqId);
+    if (covered && !state.byReq.has(reqId)) {
+      delete state.edits[reqId];
+      changed = true;
+    }
+  }
+  if (changed) lsSet(LS_EDITS, state.edits);
+}
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -119,6 +225,7 @@ async function loadDocs() {
   state.docs = await api("/documents");
   renderExplorer();
   renderDashboard();
+  renderCorpusMenu();
   // Preload every doc's chunks: the corpus is small, and jump-to-requirement
   // across documents needs the req -> doc map up front.
   for (const d of state.docs) {
@@ -126,9 +233,8 @@ async function loadDocs() {
     state.chunks[d.doc_id] = detail.chunks;
     for (const c of detail.chunks) state.reqDoc.set(c.requirement_id, d.doc_id);
   }
-  // Pick a default document for the editor without forcing a render — the
-  // workspace is not visible until the user leaves the dashboard.
-  if (!state.openDoc && state.docs.length) state.openDoc = state.docs[0].doc_id;
+  // The workspace explorer is an audit-history list, not a corpus list, so no
+  // document is opened by default — the workspace starts with no tabs.
   renderExplorer();
 }
 
@@ -143,27 +249,111 @@ function docProblemCounts(docId) {
   return { errors, warnings };
 }
 
+/* The explorer is a history of audited documents (newest first), not the whole
+ * corpus — it starts empty and fills as you run audits. Counts are the snapshot
+ * from when the audit ran (findings themselves are not persisted across reloads),
+ * so the badge stays meaningful after a refresh. */
 function renderExplorer() {
   const ul = $("#file-list");
   ul.innerHTML = "";
-  for (const d of state.docs) {
+  const known = new Set(state.docs.map((d) => d.doc_id));
+  const entries = state.history.filter((h) => known.has(h.doc_id));
+
+  if (!entries.length) {
+    const hint = document.createElement("li");
+    hint.className = "explorer-hint";
+    hint.textContent = "No audits yet — pick a file from the Corpus ▾ menu or the dashboard, then Run audit.";
+    ul.appendChild(hint);
+    return;
+  }
+
+  for (const h of entries) {
     const li = document.createElement("li");
+    li.className = "hist-item";
     li.setAttribute("role", "option");
-    if (d.doc_id === state.openDoc) li.classList.add("active");
+    if (h.doc_id === state.openDoc) li.classList.add("active");
+
+    const main = document.createElement("div");
+    main.className = "hist-main";
     const name = document.createElement("span");
-    name.textContent = d.source || d.doc_id; // real filename: SYS.md, BRAKE.pdf, …
-    li.appendChild(name);
-    const { errors, warnings } = docProblemCounts(d.doc_id);
-    if (errors || warnings) {
-      const badge = document.createElement("span");
-      badge.className = errors ? "file-badge" : "file-badge warn";
-      badge.textContent = errors + warnings;
-      li.appendChild(badge);
-    }
-    li.onclick = () => openDoc(d.doc_id);
+    name.className = "hist-name";
+    name.textContent = h.source || h.doc_id;
+    const meta = document.createElement("span");
+    meta.className = "hist-meta";
+    meta.textContent = `${timeAgo(h.ts)} · ✖ ${h.errors} · ⚠ ${h.warnings}`;
+    main.append(name, meta);
+    li.appendChild(main);
+
+    const total = h.errors + h.warnings;
+    const badge = document.createElement("span");
+    badge.className = total ? (h.errors ? "file-badge" : "file-badge warn") : "file-badge clean";
+    badge.textContent = total ? String(total) : "✓";
+    li.appendChild(badge);
+
+    li.onclick = () => openDoc(h.doc_id);
     ul.appendChild(li);
   }
 }
+
+/* Record an audit run into the explorer history (persisted to localStorage).
+ * A scoped audit upserts the focus document; a full-corpus audit upserts every
+ * document so each stays a real, openable row with its own problem count. */
+function recordAudit(report) {
+  const stamp = Date.now();
+  const upsert = (docId, errors, warnings) => {
+    const source = state.docs.find((d) => d.doc_id === docId)?.source || docId;
+    state.history = state.history.filter((h) => h.doc_id !== docId);
+    state.history.unshift({ doc_id: docId, source, ts: stamp, errors, warnings });
+  };
+  if (report.doc_id) {
+    const { errors, warnings } = docProblemCounts(report.doc_id);
+    upsert(report.doc_id, errors, warnings);
+  } else {
+    for (const d of state.docs) {
+      const { errors, warnings } = docProblemCounts(d.doc_id);
+      upsert(d.doc_id, errors, warnings);
+    }
+  }
+  lsSet(LS_HISTORY, state.history);
+}
+
+/* Topbar "Corpus ▾" dropdown: the full corpus, always reachable from the
+ * workspace even though the explorer only tracks audited files. */
+function renderCorpusMenu() {
+  const ul = $("#corpus-menu-list");
+  ul.innerHTML = "";
+  if (!state.docs.length) {
+    const li = document.createElement("li");
+    li.id = "corpus-menu-empty";
+    li.textContent = "No documents ingested yet.";
+    ul.appendChild(li);
+    return;
+  }
+  for (const d of state.docs) {
+    const ext = docExt(d);
+    const li = document.createElement("li");
+    li.setAttribute("role", "option");
+    const badge = document.createElement("span");
+    badge.className = `doc-badge ${ext}`;
+    badge.textContent = ext.toUpperCase() || "?";
+    const name = document.createElement("span");
+    name.className = "doc-name";
+    name.textContent = d.source || d.doc_id;
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.textContent = "open";
+    openBtn.onclick = async () => { closeCorpusMenu(); await openDoc(d.doc_id); showScreen("workspace"); };
+    const auditBtn = document.createElement("button");
+    auditBtn.type = "button";
+    auditBtn.className = "corpus-audit-btn";
+    auditBtn.textContent = "▶ audit";
+    auditBtn.onclick = () => { closeCorpusMenu(); runAudit(d.doc_id); };
+    li.append(badge, name, openBtn, auditBtn);
+    ul.appendChild(li);
+  }
+}
+
+function closeCorpusMenu() { $("#corpus-menu-list").hidden = true; }
 
 /* ─── editor ───────────────────────────────────────────────────────────── */
 async function openDoc(docId) {
@@ -171,9 +361,51 @@ async function openDoc(docId) {
     const detail = await api(`/documents/${docId}`);
     state.chunks[docId] = detail.chunks;
   }
+  if (!state.openTabs.includes(docId)) state.openTabs.push(docId);
   state.openDoc = docId;
   renderExplorer();
+  renderTabs();
   renderEditor();
+}
+
+function closeTab(docId) {
+  const idx = state.openTabs.indexOf(docId);
+  if (idx < 0) return;
+  state.openTabs.splice(idx, 1);
+  if (state.openDoc === docId) {
+    state.openDoc = state.openTabs[idx] ?? state.openTabs[idx - 1] ?? null;
+  }
+  renderExplorer();
+  renderTabs();
+  renderEditor();
+}
+
+function renderTabs() {
+  const bar = $("#editor-tabs");
+  bar.innerHTML = "";
+  if (!state.openTabs.length) {
+    const ph = document.createElement("span");
+    ph.className = "editor-tab placeholder";
+    ph.textContent = "no file open";
+    bar.appendChild(ph);
+    return;
+  }
+  for (const docId of state.openTabs) {
+    const meta = state.docs.find((d) => d.doc_id === docId);
+    const tab = document.createElement("span");
+    tab.className = "editor-tab" + (docId === state.openDoc ? " active" : "");
+    const label = document.createElement("span");
+    label.textContent = meta?.source || docId;
+    label.onclick = () => openDoc(docId);
+    const close = document.createElement("button");
+    close.className = "tab-close";
+    close.type = "button";
+    close.textContent = "×";
+    close.title = "Close tab";
+    close.onclick = (e) => { e.stopPropagation(); closeTab(docId); };
+    tab.append(label, close);
+    bar.appendChild(tab);
+  }
 }
 
 function problemCard(finding, ownReq) {
@@ -181,13 +413,15 @@ function problemCard(finding, ownReq) {
   const severity = SEVERITY[c.conflict_type] ?? "error";
   const other = c.req_a === ownReq ? c.req_b : c.req_a;
   const otherQuote = c.req_a === ownReq ? c.evidence_quote_b : c.evidence_quote_a;
+  const stale = findingIsStale(c);
   const card = document.createElement("div");
-  card.className = `req-problem-card ${severity}`;
+  card.className = `req-problem-card ${severity}` + (stale ? " stale-finding" : "");
   const label = c.conflict_type.replace(/_/g, " ");
   card.innerHTML =
     `<strong>${severity === "warning" ? "⚠" : "✖"} ${label}</strong> with ` +
     `<span class="other-req" data-req="${other}">${other}</span>` +
     `<span class="conf"> · confidence ${finding.verdict.confidence.toFixed(2)}</span>` +
+    (stale ? `<span class="edited-tag">edited</span>` : "") +
     `<br/><em>“${otherQuote}”</em>`;
   card.querySelector(".other-req").onclick = () => jumpTo(other);
 
@@ -224,10 +458,30 @@ function problemCard(finding, ownReq) {
   return card;
 }
 
+// Original snapshot for a resolved requirement, or null if the current text +
+// params match the stored original (a reverted edit self-cleans here).
+function editOriginal(chunk) {
+  const orig = state.edits[chunk.requirement_id];
+  if (!orig) return null;
+  const paramsEqual =
+    JSON.stringify(orig.parameters ?? {}) === JSON.stringify(chunk.parameters ?? {});
+  if (orig.text === chunk.text && paramsEqual) {
+    delete state.edits[chunk.requirement_id];
+    lsSet(LS_EDITS, state.edits);
+    return null;
+  }
+  return orig;
+}
+
 function renderEditor() {
-  const openMeta = state.docs.find((d) => d.doc_id === state.openDoc);
-  $("#open-doc-name").textContent = openMeta?.source || state.openDoc;
   const body = $("#editor-body");
+  if (!state.openDoc) {
+    body.innerHTML =
+      `<div class="empty-state"><p>⬡</p>` +
+      `<p>No file open. Pick a document from the <strong>Corpus ▾</strong> menu or the` +
+      ` dashboard, then <strong>Run audit</strong> to see its problems inline.</p></div>`;
+    return;
+  }
   body.innerHTML = "";
   let lastSection = null;
 
@@ -245,15 +499,17 @@ function renderEditor() {
     const worst = findings.some((f) => SEVERITY[f.candidate.conflict_type] !== "warning")
       ? "error"
       : findings.length ? "warning" : null;
+    const orig = editOriginal(chunk);
 
     const art = document.createElement("article");
-    art.className = "req" + (worst ? ` problem-${worst}` : "");
+    art.className = "req" + (worst ? ` problem-${worst}` : "") + (orig ? " edited" : "");
     art.id = `req-${chunk.requirement_id}`;
 
     const gutter = document.createElement("div");
     gutter.className = "gutter";
     gutter.innerHTML = `<span class="req-id">${chunk.requirement_id}</span>` +
-      (chunk.status === "superseded" ? `<span class="status superseded">superseded</span>` : "");
+      (chunk.status === "superseded" ? `<span class="status superseded">superseded</span>` : "") +
+      (orig ? `<span class="status edited">edited</span>` : "");
     art.appendChild(gutter);
 
     const content = document.createElement("div");
@@ -263,16 +519,57 @@ function renderEditor() {
     title.textContent = chunk.title;
     const text = document.createElement("p");
     text.className = "req-text";
-    text.textContent = chunk.text;
+    if (orig && orig.text !== chunk.text) {
+      // Combined old-vs-new diff: deletions struck through in red, insertions green.
+      renderDiffSpans(text, diffWords(orig.text, chunk.text),
+        { same: null, del: "diff-del", ins: "diff-ins" });
+    } else {
+      text.textContent = chunk.text;
+    }
     content.append(title, text);
 
     const params = Object.entries(chunk.parameters ?? {});
     if (params.length) {
       const p = document.createElement("div");
       p.className = "req-params";
-      p.textContent = params.map(([k, v]) => `${k} = ${v}`).join("   ");
+      const op = orig?.parameters ?? {};
+      for (const [k, v] of params) {
+        const seg = document.createElement("span");
+        if (orig && k in op && String(op[k]) !== String(v)) {
+          seg.className = "param-changed";
+          const del = document.createElement("span");
+          del.className = "diff-del";
+          del.textContent = `${op[k]}`;
+          const ins = document.createElement("span");
+          ins.className = "diff-ins";
+          ins.textContent = `${v}`;
+          seg.append(document.createTextNode(`${k} = `), del, document.createTextNode(" → "), ins);
+        } else {
+          seg.textContent = `${k} = ${v}`;
+        }
+        p.appendChild(seg);
+        p.appendChild(document.createTextNode("   "));
+      }
       content.appendChild(p);
     }
+
+    if (orig) {
+      const actions = document.createElement("div");
+      actions.className = "req-edit-actions";
+      const keep = document.createElement("button");
+      keep.type = "button";
+      keep.className = "keep-btn";
+      keep.textContent = "✓ Keep";
+      keep.title = "Accept this text as the new baseline and hide the diff";
+      keep.onclick = () => {
+        delete state.edits[chunk.requirement_id];
+        lsSet(LS_EDITS, state.edits);
+        renderEditor();
+      };
+      actions.appendChild(keep);
+      content.appendChild(actions);
+    }
+
     for (const f of findings) content.appendChild(problemCard(f, chunk.requirement_id));
 
     art.appendChild(content);
@@ -329,7 +626,7 @@ function auditStageChip(stepRecord) {
 
 function applyAuditReport(report) {
   state.findings = report.findings;
-  state.lastAuditDocId = report.doc_id ?? null; // "resolve" re-runs this same scope
+  state.lastAuditDocId = report.doc_id ?? null; // scope of the most recent audit
   state.byReq = new Map();
   for (const f of report.findings) {
     for (const req of [f.candidate.req_a, f.candidate.req_b]) {
@@ -337,8 +634,15 @@ function applyAuditReport(report) {
       state.byReq.get(req).push(f);
     }
   }
+  // Order matters: recordAudit reads the fresh byReq counts; the edit auto-clear
+  // reads byReq to decide "conflict gone"; both run before the renders.
+  recordAudit(report);
+  clearResolvedEdits(report);
+  state.editsSinceAudit.clear(); // a completed audit is the fresh baseline
+  renderStale();
   renderProblems();
   renderExplorer();
+  renderTabs();
   renderEditor();
   const mode = report.llm_used ? "LLM-verified" : "deterministic rules (no LLM key)";
   const scope = report.doc_id ? `scoped to ${report.doc_id}` : "full corpus";
@@ -414,13 +718,25 @@ function renderCompare() {
       const input = document.createElement("input");
       input.type = "text";
       input.value = edited[side].params[key] ?? "";
-      input.oninput = (e) => { compareState.edited[side].params[key] = e.target.value; };
+      input.oninput = (e) => {
+        compareState.edited[side].params[key] = e.target.value;
+      };
       const label = document.createElement("label");
       label.textContent = key;
       row.append(label, input);
       container.appendChild(row);
     }
   }
+  updateCompareDiff();
+}
+
+// Word-diff the two sides live: segments unique to A are highlighted on A's
+// strip, segments unique to B on B's strip (Beyond-Compare-style per-side view).
+function updateCompareDiff() {
+  if (!compareState) return;
+  const ops = diffWords(compareState.edited.a.text, compareState.edited.b.text);
+  renderDiffSpans($("#compare-a-diff"), ops, { same: null, del: "diff-a" });
+  renderDiffSpans($("#compare-b-diff"), ops, { same: null, ins: "diff-b" });
 }
 
 function useSide(side) {
@@ -465,7 +781,8 @@ async function resolveCompare() {
       )
     );
     // Refresh the locally cached chunks so the editor reflects the edit
-    // immediately, even before the re-audit's response comes back.
+    // immediately. The audit is NOT re-run here — resolving many conflicts and
+    // then re-auditing once (manually) is far cheaper than a sweep per edit.
     for (const chunk of updated) {
       const list = state.chunks[chunk.doc_id];
       if (list) {
@@ -473,9 +790,21 @@ async function resolveCompare() {
         if (idx >= 0) list[idx] = chunk;
       }
     }
-    const rescopeTo = state.lastAuditDocId;
+    // Track the edit: mark the audit stale, and snapshot the first-ever original
+    // text/params so the editor can show the old-vs-new diff (persisted).
+    for (const [reqId, side] of edits) {
+      state.editsSinceAudit.add(reqId);
+      const orig = compareState.orig[reqId === reqA ? "a" : "b"];
+      if (!state.edits[reqId]) {
+        state.edits[reqId] = { text: orig.text, parameters: { ...orig.params }, ts: Date.now() };
+      }
+    }
+    lsSet(LS_EDITS, state.edits);
+
     closeCompare();
-    await runAudit(rescopeTo);
+    rerenderAll();
+    renderStale();
+    status(`saved ${edits.length} edit(s) — audit results may be stale, re-run when ready`);
   } catch (e) {
     $("#compare-status").textContent = `save failed: ${e.message}`;
     btn.disabled = false;
@@ -541,28 +870,52 @@ async function runAudit(docId) {
   }
 }
 
+function problemMatches(f) {
+  const c = f.candidate;
+  const severity = SEVERITY[c.conflict_type] ?? "error";
+  if (state.problemFilter !== "all" && severity !== state.problemFilter) return false;
+  const q = state.problemSearch.trim().toLowerCase();
+  if (!q) return true;
+  return [c.req_a, c.req_b, c.conflict_type, c.evidence_quote_a, c.evidence_quote_b]
+    .some((s) => (s || "").toLowerCase().includes(q));
+}
+
 function renderProblems() {
   const page = $("#panel-problems");
   const count = $("#problem-count");
   page.innerHTML = "";
   count.hidden = state.findings.length === 0;
-  count.textContent = state.findings.length;
+  count.textContent = state.findings.length; // total, independent of the filter
 
   if (!state.findings.length) {
     page.innerHTML = `<div class="empty-state small">No contradictions found. 🎉</div>`;
     return;
   }
-  for (const f of state.findings) {
+  const shown = state.findings.filter(problemMatches);
+  if (!shown.length) {
+    page.innerHTML = `<div class="empty-state small">No problems match the filter.</div>`;
+    return;
+  }
+  if (shown.length !== state.findings.length) {
+    const note = document.createElement("div");
+    note.className = "problems-filter-note";
+    note.textContent = `showing ${shown.length} of ${state.findings.length}`;
+    page.appendChild(note);
+  }
+  for (const f of shown) {
     const c = f.candidate;
     const severity = SEVERITY[c.conflict_type] ?? "error";
     const decision = state.decisions.get(findingKey(f));
+    const stale = findingIsStale(c);
     const row = document.createElement("div");
-    row.className = "problem-row" + (decision === "dismissed" ? " dismissed" : "");
+    row.className = "problem-row" + (decision === "dismissed" ? " dismissed" : "") +
+      (stale ? " stale-finding" : "");
     row.innerHTML =
       `<span class="icon ${severity}">${severity === "warning" ? "⚠" : "✖"}</span>` +
       `<span class="ptype">${c.conflict_type}</span>` +
       `<span class="pmsg"><span class="pair">${c.req_a}</span> ↔ <span class="pair">${c.req_b}</span>` +
       ` — “${c.evidence_quote_a}” vs “${c.evidence_quote_b}”</span>` +
+      (stale ? `<span class="edited-tag">edited</span>` : "") +
       `<span class="conf">${(f.verdict.confidence * 100).toFixed(0)}%</span>`;
     row.onclick = () => jumpTo(c.req_a);
     const resolveBtn = document.createElement("button");
@@ -730,14 +1083,36 @@ document.addEventListener("DOMContentLoaded", () => {
   // Dashboard document picker + audit entry points.
   $("#dashboard-audit-btn").onclick = () => runAudit(state.dashboardSelection);
   $("#dashboard-audit-all-btn").onclick = () => runAudit(null);
-  $("#dashboard-browse-btn").onclick = () => {
-    if (!state.openDoc && state.docs.length) state.openDoc = state.docs[0].doc_id;
-    showScreen("workspace");
-  };
+  $("#dashboard-browse-btn").onclick = () => showScreen("workspace");
 
-  document.querySelectorAll("#panel-tabs button").forEach(
+  // Topbar corpus dropdown: toggle, and close on any outside click.
+  $("#corpus-menu-btn").onclick = (e) => {
+    e.stopPropagation();
+    $("#corpus-menu-list").hidden = !$("#corpus-menu-list").hidden;
+  };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#corpus-menu")) closeCorpusMenu();
+  });
+
+  // Only the real panel tabs switch pages — the filter buttons live in the same
+  // nav but carry data-sev, not data-tab.
+  document.querySelectorAll("#panel-tabs button[data-tab]").forEach(
     (b) => (b.onclick = () => switchPanel(b.dataset.tab))
   );
+
+  // Problems filter + search.
+  document.querySelectorAll("#problem-filter button").forEach(
+    (b) => (b.onclick = () => {
+      state.problemFilter = b.dataset.sev;
+      document.querySelectorAll("#problem-filter button")
+        .forEach((x) => x.classList.toggle("active", x === b));
+      renderProblems();
+    })
+  );
+  $("#problem-search").oninput = (e) => {
+    state.problemSearch = e.target.value;
+    renderProblems();
+  };
   $("#query-form").onsubmit = (e) => {
     e.preventDefault();
     const q = $("#query-input").value.trim();
@@ -750,10 +1125,20 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".compare-use-btn").forEach(
     (b) => (b.onclick = () => useSide(b.dataset.use))
   );
-  $("#compare-a-text").oninput = (e) => { if (compareState) compareState.edited.a.text = e.target.value; };
-  $("#compare-b-text").oninput = (e) => { if (compareState) compareState.edited.b.text = e.target.value; };
+  $("#compare-a-text").oninput = (e) => {
+    if (compareState) { compareState.edited.a.text = e.target.value; updateCompareDiff(); }
+  };
+  $("#compare-b-text").oninput = (e) => {
+    if (compareState) { compareState.edited.b.text = e.target.value; updateCompareDiff(); }
+  };
+
+  // Restore persisted state (audit history + resolution edits) before first render.
+  state.history = lsGet(LS_HISTORY, []);
+  state.edits = lsGet(LS_EDITS, {});
 
   showScreen("dashboard");
+  renderTabs();
+  renderStale();
   loadHealth();
   loadDocs().catch((e) => status(`load failed: ${e.message} — ingest the corpus first (↻)`));
 });

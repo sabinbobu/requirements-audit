@@ -47,10 +47,31 @@ button {
 button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-faint); }
 button:disabled { opacity: 0.5; cursor: wait; }
 #audit-btn { color: var(--ok); white-space: nowrap; }
+#audit-btn.stale { color: var(--warning); border-color: var(--warning); }
+#audit-btn.stale::after { content: " ●"; font-size: 8px; vertical-align: super; }
 .icon-btn { padding: 5px 9px; font-size: 14px; line-height: 1; }
 .health { font-family: var(--mono); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 .health.ok::before { content: "●"; color: var(--ok); margin-right: 5px; }
 .health.bad::before { content: "●"; color: var(--error); margin-right: 5px; }
+
+/* topbar corpus dropdown (browse the full corpus from the workspace) */
+.corpus-menu { position: relative; }
+#corpus-menu-btn { white-space: nowrap; }
+#corpus-menu-list {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  min-width: 300px; max-height: 60vh; overflow-y: auto; list-style: none;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); padding: 4px;
+}
+#corpus-menu-list li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  font-family: var(--mono); font-size: 12px; border-radius: 6px;
+}
+#corpus-menu-list li:hover { background: var(--bg-hover); }
+#corpus-menu-list .doc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#corpus-menu-list button { font-size: 11px; padding: 2px 8px; }
+#corpus-menu-list .corpus-audit-btn { color: var(--ok); border-color: var(--border); }
+#corpus-menu-empty { padding: 12px; color: var(--text-faint); font-size: 12px; }
 
 /* ─── dashboard (landing screen) ─────────────────────────────────────────── */
 #dashboard { flex: 1; overflow-y: auto; display: flex; justify-content: center; }
@@ -151,6 +172,13 @@ button:disabled { opacity: 0.5; cursor: wait; }
   line-height: 1.5; resize: vertical; outline: none;
 }
 .compare-side textarea:focus { border-color: var(--accent); }
+.compare-diff-view {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin-bottom: 12px; min-height: 2.4em;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word; color: var(--text-dim);
+}
+.compare-diff-view:empty::before { content: "identical"; color: var(--text-faint); }
 .compare-params { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .compare-param-row {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px;
@@ -187,29 +215,49 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .pane-title button { padding: 1px 7px; font-size: 12px; }
 .pane-actions { display: flex; gap: 4px; }
 #file-list { list-style: none; }
-#file-list li {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 5px 12px 5px 18px; cursor: pointer;
+#file-list li.hist-item {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+  padding: 6px 12px 6px 18px; cursor: pointer;
   font-family: var(--mono); font-size: 12px; color: var(--text-dim);
 }
-#file-list li:hover { background: var(--bg-hover); color: var(--text); }
-#file-list li.active { background: var(--bg-active); color: var(--text); }
-#file-list li::before { content: "▸ "; color: var(--text-faint); }
-#file-list li.active::before { content: "▾ "; }
+#file-list li.hist-item:hover { background: var(--bg-hover); color: var(--text); }
+#file-list li.hist-item.active { background: var(--bg-active); color: var(--text); }
+#file-list li.hist-item::before { content: "▸ "; color: var(--text-faint); }
+#file-list li.hist-item.active::before { content: "▾ "; }
+.hist-main { min-width: 0; flex: 1; }
+.hist-name { display: block; overflow: hidden; text-overflow: ellipsis; }
+.hist-meta { display: block; margin-top: 2px; font-size: 10px; color: var(--text-faint); }
 #file-list .file-badge {
-  min-width: 18px; text-align: center; border-radius: 9px;
+  flex-shrink: 0; min-width: 18px; text-align: center; border-radius: 9px;
   font-size: 10px; padding: 1px 5px; background: var(--error); color: #fff;
 }
 #file-list .file-badge.warn { background: var(--warning); color: #222; }
+#file-list .file-badge.clean { background: var(--bg-active); color: var(--ok); }
+.explorer-hint {
+  padding: 14px 16px; color: var(--text-faint); font-size: 12px;
+  line-height: 1.7; cursor: default; list-style: none;
+}
 
 /* ─── editor ─────────────────────────────────────────────────────────────── */
 #editor { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-#editor-tabs { background: var(--bg-chrome); border-bottom: 1px solid var(--border); padding: 0 8px; }
+#editor-tabs {
+  display: flex; align-items: flex-end; gap: 2px; overflow-x: auto;
+  background: var(--bg-chrome); border-bottom: 1px solid var(--border); padding: 0 8px;
+}
 .editor-tab {
-  display: inline-block; padding: 7px 16px; font-family: var(--mono); font-size: 12px;
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px 7px 16px;
+  font-family: var(--mono); font-size: 12px; white-space: nowrap; cursor: pointer;
   background: var(--bg); border: 1px solid var(--border); border-bottom: none;
   border-radius: 6px 6px 0 0; margin-top: 6px; color: var(--text-dim);
 }
+.editor-tab:hover:not(.placeholder) { color: var(--text); }
+.editor-tab.active { color: var(--text); background: var(--bg); border-bottom: 1px solid var(--bg); margin-bottom: -1px; }
+.editor-tab.placeholder { cursor: default; background: transparent; border-color: transparent; }
+.tab-close {
+  background: none; border: none; border-radius: 3px; padding: 0 3px; margin: 0;
+  font-size: 13px; line-height: 1; color: var(--text-faint);
+}
+.tab-close:hover { color: var(--text); background: var(--bg-hover); }
 #editor-body { flex: 1; overflow-y: auto; padding: 18px 0 40vh 0; font-family: var(--mono); }
 
 .section-header {
@@ -235,6 +283,20 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .req-text { margin-top: 3px; font-size: 12.5px; line-height: 1.55; color: var(--text-dim); }
 .req-params { margin-top: 5px; font-size: 11px; color: var(--accent); opacity: 0.75; }
 .req-params::before { content: "· "; color: var(--text-faint); }
+
+/* ─── Beyond-Compare-style diff colours ──────────────────────────────────── */
+/* old-vs-new (editor inline diff, combined view) */
+.diff-del { background: rgba(255, 95, 86, 0.16); color: var(--error); text-decoration: line-through; border-radius: 2px; }
+.diff-ins { background: rgba(39, 201, 63, 0.16); color: var(--ok); border-radius: 2px; }
+/* per-side difference markers (compare overlay: segments unique to a side) */
+.diff-a { background: rgba(255, 95, 86, 0.22); border-radius: 2px; }
+.diff-b { background: rgba(77, 163, 255, 0.24); border-radius: 2px; }
+
+.req.edited { border-left-color: var(--accent); }
+.gutter .status.edited { background: #20303a; color: var(--accent); }
+.req-edit-actions { margin-top: 6px; }
+.req-edit-actions .keep-btn { padding: 2px 9px; font-size: 11px; color: var(--ok); border-color: var(--border); }
+.req-params .param-changed { color: var(--text); }
 
 /* the lint squiggle — the whole point */
 .squiggle-error {
@@ -268,6 +330,13 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .resolve-btn { padding: 2px 9px; font-size: 11px; color: var(--accent); border-color: var(--accent); }
 .problem-row .resolve-btn { margin-left: 8px; }
 
+/* findings touching a requirement edited since the last audit are stale */
+.problem-row.stale-finding, .req-problem-card.stale-finding { opacity: 0.55; }
+.edited-tag {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--warning);
+  border: 1px solid rgba(255, 189, 46, 0.4); border-radius: 4px; padding: 0 5px; margin-left: 6px;
+}
+
 /* ─── bottom panel ───────────────────────────────────────────────────────── */
 #panel {
   height: 220px; flex-shrink: 0; display: flex; flex-direction: column;
@@ -284,6 +353,23 @@ button:disabled { opacity: 0.5; cursor: wait; }
   background: var(--error); color: #fff; border-radius: 9px;
   font-size: 10px; padding: 1px 6px; margin-left: 4px;
 }
+
+/* problems filter + search toolbar (right-aligned in the panel tab row) */
+#problems-toolbar { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+#problem-filter { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+#problem-filter button {
+  border: none; border-radius: 0; border-bottom: none; padding: 3px 9px;
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-dim); background: var(--bg-panel);
+}
+#problem-filter button + button { border-left: 1px solid var(--border); }
+#problem-filter button.active { color: var(--text); background: var(--bg-active); border-bottom: none; }
+#problem-search {
+  width: 180px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px; font-family: var(--mono); font-size: 11px; outline: none;
+}
+#problem-search:focus { border-color: var(--accent); }
+.problems-filter-note { padding: 4px 16px 6px; font-size: 11px; color: var(--text-faint); }
 .panel-page { display: none; overflow-y: auto; flex: 1; padding: 8px 0; }
 .panel-page.active { display: block; }
 
@@ -320,10 +406,13 @@ button:disabled { opacity: 0.5; cursor: wait; }
 
 /* ─── status bar ─────────────────────────────────────────────────────────── */
 #statusbar {
-  display: flex; justify-content: space-between; gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   background: var(--bg-chrome); border-top: 1px solid var(--border);
   padding: 4px 14px; font-family: var(--mono); font-size: 11px; color: var(--text-dim);
 }
+#statusbar #status-stats { margin-left: auto; }
+#stale-indicator { color: var(--warning); white-space: nowrap; }
+#stale-indicator[hidden] { display: none; }
 
 /* ─── shared ─────────────────────────────────────────────────────────────── */
 .empty-state { text-align: center; color: var(--text-faint); padding: 60px 20px; font-size: 13px; line-height: 1.8; }
